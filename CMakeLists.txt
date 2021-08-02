@@ -7,7 +7,7 @@ project(SlicerDWD)
 set(EXTENSION_HOMEPAGE "https://www.slicer.org/wiki/Documentation/Nightly/Extensions/SlicerDWD")
 set(EXTENSION_CATEGORY "Examples")
 set(EXTENSION_CONTRIBUTORS "David Allemang (Kitware Inc.)")
-set(EXTENSION_DESCRIPTION "This is an example of a simple extension")
+set(EXTENSION_DESCRIPTION "Perform and visualize Distance-Weighted Discrimination on correspondent populations.")
 set(EXTENSION_ICONURL "http://www.example.com/Slicer/Extensions/SlicerDWD.png")
 set(EXTENSION_SCREENSHOTURLS "http://www.example.com/Slicer/Extensions/SlicerDWD/Screenshots/1.png")
 set(EXTENSION_DEPENDS "NA") # Specified as a list or "NA" if no dependencies
