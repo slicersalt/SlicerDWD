@@ -72,8 +72,15 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose
         )
 
-        # Buttons
-        self.ui.applyButton.connect("clicked(bool)", self.onApplyButton)
+        self.ui.chk_autoTune.stateChanged.connect(self.autoTuneStateChanged)
+
+        for _ in range(3):
+            self.ui.tbl_stats.insertRow(0)
+        for _ in range(2):
+            self.ui.tbl_stats.insertColumn(0)
+
+    def autoTuneStateChanged(self, enabled):
+        self.ui.spn_tuningC.enabled = not enabled
 
     def cleanup(self):
         """Called when the application closes and the module widget is destroyed."""
