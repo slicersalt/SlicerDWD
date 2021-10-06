@@ -1,6 +1,14 @@
+import csv
+import warnings
+
 import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
+
+import vtk
+from vtk.numpy_interface import dataset_adapter as dsa
+
+import numpy as np
 
 try:
     import dwd
@@ -44,8 +52,11 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
+
         self.logic = None
-        self._updatingGUIFromParameterNode = False
+
+        self.trainCases = None
+        self.testCases = None
 
     def setup(self):
         """Called when the user opens the module the first time and the widget is
@@ -78,7 +89,13 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose
         )
 
+        self.ui.path_train.currentPathChanged.connect(self.trainPathChanged)
         self.ui.chk_autoTune.stateChanged.connect(self.autoTuneStateChanged)
+        self.ui.btn_train.clicked.connect(self.trainClicked)
+
+        self.ui.path_test.currentPathChanged.connect(self.testPathChanged)
+
+        self.ui.btn_mean.clicked.connect(self.meanClicked)
 
         self.ui.tbl_stats.insertColumn(0)
         self.ui.tbl_stats.insertRow(0)
@@ -90,6 +107,65 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def autoTuneStateChanged(self, enabled):
         """Called when the "Auto Tune" checkbox is changed."""
         self.ui.spn_tuningC.enabled = not enabled
+
+    @property
+    def tuningC(self):
+        if self.ui.chk_autoTune.checked:
+            return 'auto'
+        return self.ui.spn_tuningC.value
+
+    def trainPathChanged(self, path):
+        """Called when the training dataset path is changed."""
+        try:
+            self.trainCases = self.logic.buildCases(path)
+            self.ui.btn_train.enabled = bool(self.trainCases)
+        except (OSError, ValueError):
+            slicer.util.errorDisplay('Failed to load training dataset {}'.format(path))
+            self.ui.btn_train.enabled = False
+
+    def trainClicked(self):
+        """Called when the "Train Classifier" button is clicked."""
+        success = self.logic.train(
+            self.trainCases,
+            self.tuningC
+        )
+
+        # todo need to also check path_test
+        self.ui.btn_test.enabled = success
+
+        # todo need to also check path_input
+        self.ui.btn_mean.enabled = success
+        self.ui.btn_corr.enabled = success
+
+    def testPathChanged(self, path):
+        """Called when the testing dataset path is changed."""
+        try:
+            self.testCases = self.logic.buildCases(path)
+            self.ui.btn_test.enabled = bool(self.testCases)
+        except (OSError, ValueError):
+            slicer.util.errorDisplay('Failed to load testing dataset {}'.format(path))
+            self.ui.btn_test.enabled = False
+
+    def meanClicked(self):
+        """Called when the 'Compute Mean" button is clicked."""
+
+        mean = self.logic.meanShape(self.trainCases, factor=50.0)
+
+        model = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode')
+        model.CreateDefaultDisplayNodes()
+
+        model.SetAndObservePolyData(mean.VTKObject)
+        model.GetDisplayNode().SetVisibility(True)
+
+        # # Launch the CLI ShapePopulationViewer
+        # # See SVA for how to invoke SPV.
+        # # https://github.com/NIRALUser/ShapeVariationAnalyzer/blob/master/ShapeVariationAnalyzer/ShapeVariationAnalyzer.py#L742-L764
+        # # Fails with "Could not find logic for module 'ShapePopulationViewer'"
+
+        # parameters = {}
+        # parameters["vtkFiles"] = mean.VTKObject
+        # module = slicer.modules.shapepopulationviewer
+        # slicer.cli.run(module, None, parameters, wait_for_completion=True)
 
     def cleanup(self):
         """Called when the application closes and the module widget is destroyed."""
@@ -145,6 +221,87 @@ class DWDLogic(ScriptedLoadableModuleLogic):
         member variables.
         """
         super().__init__(self)
+
+        self.classifier = None
+
+    def buildCases(self, csv_path):
+        with open(csv_path, 'r') as f:
+            reader = csv.reader(f)
+            # could do with list() but this enforces row structure
+            return [(path, group) for path, group in reader]
+
+    def read_vtk(self, path):
+        reader = vtk.vtkPolyDataReader()
+        reader.SetFileName(str(path))
+        reader.Update()
+        return dsa.WrapDataObject(reader.GetOutput())
+
+    def save_vtk(self, path, pdata: dsa.PolyData):
+        writer = vtk.vtkPolyDataWriter()
+        writer.SetFileName(str(path))
+        writer.SetInputData(pdata.VTKObject)
+        writer.Update()
+
+    def copy_dsa(self, pdata: dsa.PolyData):
+        res = dsa.WrapDataObject(vtk.vtkPolyData())
+        res.VTKObject.DeepCopy(pdata.VTKObject)
+        return res
+
+    def make_xy(self, cases):
+        X = np.array([
+            self.read_vtk(path).Points.flatten()
+            for path, group in cases
+        ])
+        y = np.array([group for path, group in cases])
+
+        return X, y
+
+    def train(self, cases, c='auto'):
+        """Train the model."""
+
+        self.classifier = None
+
+        slicer.util.showStatusMessage('DWD: Loading Dataset', 2000)
+        X, y = self.make_xy(cases)
+
+        slicer.util.showStatusMessage('DWD: Fitting classifier', 2000)
+        self.classifier = dwd.DWD(c)
+        with warnings.catch_warnings(record=True):
+            self.classifier.fit(X, y)
+        slicer.util.showStatusMessage('DWD: {}'.format(self.classifier), 2000)
+
+        return True
+
+    def meanShape(self, cases, factor=1.0):
+        base = self.read_vtk(cases[0][0])
+        X, _ = self.make_xy(cases)
+
+        shape = base.Points.shape
+        d, i = self.direction
+
+        mean = np.mean(X, axis=0)
+        mean -= d * (i - np.dot(mean, d))
+        mean = mean.reshape(shape)
+
+        mean_dir = d * factor
+        mean_dir = mean_dir.reshape(shape)
+
+        out = self.copy_dsa(base)
+        out.Points = mean
+        out.PointData.append(mean_dir, 'Direction')
+
+        return out
+
+    @property
+    def direction(self):
+        """Return the DWD direction and intercept. The separating hyperplane is of the
+        form 'p.d = d.i', where '.' is the dot product. If 'p.d < d.i', then 'p' is label
+        0. If 'p.d > d.i', then 'p' is label 1.
+        """
+
+        direction = self.classifier.coef_.reshape(-1)
+        intercept = -float(self.classifier.intercept_)
+        return direction, intercept
 
 
 class DWDTest(ScriptedLoadableModuleTest):
