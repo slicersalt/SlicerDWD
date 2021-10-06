@@ -17,7 +17,7 @@ class DWD(ScriptedLoadableModule):
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = "DWD Classification"
-        self.parent.categories = ["Examples"]
+        self.parent.categories = ["Shape Analysis"]
         self.parent.dependencies = []
         self.parent.contributors = ["David Allemang (Kitware, Inc.)"]
         self.parent.helpText = """
