@@ -80,12 +80,15 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.ui.chk_autoTune.stateChanged.connect(self.autoTuneStateChanged)
 
-        for _ in range(3):
-            self.ui.tbl_stats.insertRow(0)
-        for _ in range(2):
-            self.ui.tbl_stats.insertColumn(0)
+        self.ui.tbl_stats.insertColumn(0)
+        self.ui.tbl_stats.insertRow(0)
+        self.ui.tbl_stats.insertRow(0)
+
+        self.ui.tbl_stats.horizontalHeader().visible = False
+        self.ui.tbl_stats.setVerticalHeaderLabels(['Accuracy', 'Errors'])
 
     def autoTuneStateChanged(self, enabled):
+        """Called when the "Auto Tune" checkbox is changed."""
         self.ui.spn_tuningC.enabled = not enabled
 
     def cleanup(self):
