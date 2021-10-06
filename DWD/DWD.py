@@ -10,6 +10,8 @@ from vtk.numpy_interface import dataset_adapter as dsa
 
 import numpy as np
 
+import scipy
+
 try:
     import dwd
 except ModuleNotFoundError:
@@ -96,6 +98,7 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.path_test.currentPathChanged.connect(self.testPathChanged)
 
         self.ui.btn_mean.clicked.connect(self.meanClicked)
+        self.ui.btn_kde.clicked.connect(self.kdeClicked)
 
         self.ui.tbl_stats.insertColumn(0)
         self.ui.tbl_stats.insertRow(0)
@@ -125,6 +128,7 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def trainClicked(self):
         """Called when the "Train Classifier" button is clicked."""
+
         success = self.logic.train(
             self.trainCases,
             self.tuningC
@@ -135,6 +139,7 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # todo need to also check path_input
         self.ui.btn_mean.enabled = success
+        self.ui.btn_kde.enabled = success
         self.ui.btn_corr.enabled = success
 
     def testPathChanged(self, path):
@@ -157,15 +162,73 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         model.SetAndObservePolyData(mean.VTKObject)
         model.GetDisplayNode().SetVisibility(True)
 
-        # # Launch the CLI ShapePopulationViewer
-        # # See SVA for how to invoke SPV.
-        # # https://github.com/NIRALUser/ShapeVariationAnalyzer/blob/master/ShapeVariationAnalyzer/ShapeVariationAnalyzer.py#L742-L764
-        # # Fails with "Could not find logic for module 'ShapePopulationViewer'"
+        mgr = slicer.app.layoutManager()
+        mgr.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUp3DView)
+
+        ## Ideally this would Launch the CLI ShapePopulationViewer
+        ## See SVA for how to invoke SPV.
+        ## https://github.com/NIRALUser/ShapeVariationAnalyzer/blob/master/ShapeVariationAnalyzer/ShapeVariationAnalyzer.py#L742-L764
+        ## Fails with "Could not find logic for module 'ShapePopulationViewer'"
+        ## Can manually select the model in SPV though.
 
         # parameters = {}
         # parameters["vtkFiles"] = mean.VTKObject
         # module = slicer.modules.shapepopulationviewer
         # slicer.cli.run(module, None, parameters, wait_for_completion=True)
+
+    def kdeClicked(self):
+        """Called when the "Show KDE" button is clicked."""
+
+        results = self.logic.compute(self.trainCases)
+        kernel_all = scipy.stats.gaussian_kde(
+            results['distance']
+        )
+        results['rand'] = np.random.normal(
+            size=results['distance'].shape
+        ) * kernel_all(results['distance']) * 0.05 + 0.007
+
+        kde_space = np.linspace(results['distance'].min(), results['distance'].max())
+        kernels = {
+            'Class {}'.format(t): scipy.stats.gaussian_kde(
+                results['distance'][results['actual'] == t]
+            ) for t in np.unique(results['actual'])
+        }
+
+        kde_results = {
+            'x': kde_space,
+            'all': kernel_all(kde_space),
+            **{t: kernel(kde_space) for t, kernel in kernels.items()}
+        }
+
+        results_table = self.logic.table(results, 'DWD Results')
+        kde_table = self.logic.table(kde_results, 'DWD Results KDE')
+
+        chart = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLPlotChartNode')
+        chart.SetTitle('A Simple KDE')
+        chart.SetXAxisTitle('Distance')
+        chart.SetYAxisTitle('Density')
+
+        scatter = self.logic.scatterPlot(chart, results_table, 'distance', 'rand')
+        scatter.SetLineStyle(scatter.LineStyleNone)
+        scatter.SetMarkerStyle(scatter.MarkerStyleCross)
+        scatter.SetColor(0, 0, 0)
+
+        full = self.logic.scatterPlot(chart, kde_table, 'x', 'all')
+        full.SetColor(0, 0, 0)
+
+        colors = [
+            (1.0, 0.7, 0.2),
+            (0.2, 0.6, 0.8),
+        ]
+
+        for key, color in zip(kernels, colors):
+            plot = self.logic.scatterPlot(chart, kde_table, 'x', key)
+            plot.SetColor(*color)
+
+        self.logic.show(chart)
+
+        mgr = slicer.app.layoutManager()
+        mgr.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUpPlotView)
 
     def cleanup(self):
         """Called when the application closes and the module widget is destroyed."""
@@ -292,6 +355,20 @@ class DWDLogic(ScriptedLoadableModuleLogic):
 
         return out
 
+    def compute(self, cases):
+        d, i = self.direction
+        X, y = self.make_xy(cases)
+
+        actual = y
+        predict = self.classifier.predict(X)
+        distance = X.dot(d) - i
+
+        return {
+            'actual': actual,
+            'predict': predict,
+            'distance': distance
+        }
+
     @property
     def direction(self):
         """Return the DWD direction and intercept. The separating hyperplane is of the
@@ -302,6 +379,40 @@ class DWDLogic(ScriptedLoadableModuleLogic):
         direction = self.classifier.coef_.reshape(-1)
         intercept = -float(self.classifier.intercept_)
         return direction, intercept
+
+    def table(self, columns, name='Table'):
+        tableNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLTableNode', name)
+        table = tableNode.GetTable()
+
+        for name, data in columns.items():
+            arr = vtk.util.numpy_support.numpy_to_vtk(data)
+            arr.SetName(name)
+            table.AddColumn(arr)
+
+        return tableNode
+
+    def scatterPlot(self, chartNode, tableNode, x, y):
+        psn = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLPlotSeriesNode')
+        psn.SetAndObserveTableNodeID(tableNode.GetID())
+        psn.SetXColumnName(x)
+        psn.SetYColumnName(y)
+        psn.SetPlotType(slicer.vtkMRMLPlotSeriesNode.PlotTypeScatter)
+        psn.SetMarkerStyle(psn.MarkerStyleNone)
+        psn.SetUniqueColor()
+
+        chartNode.AddAndObservePlotSeriesNodeID(psn.GetID())
+
+        return psn
+
+    def show(self, chartNode):
+        plots = slicer.modules.plots.logic()
+
+        mgr = slicer.app.layoutManager()
+        # mgr.setLayout(plots.GetLayoutWithPlot(mgr.layout))
+
+        widget = mgr.plotWidget(0)
+        viewNode = widget.mrmlPlotViewNode()
+        viewNode.SetPlotChartNodeID(chartNode.GetID())
 
 
 class DWDTest(ScriptedLoadableModuleTest):
