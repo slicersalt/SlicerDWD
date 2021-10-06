@@ -2,6 +2,12 @@ import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
+try:
+    import dwd
+except ModuleNotFoundError:
+    slicer.util.pip_install('dwd')
+    import dwd
+
 
 class DWD(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
