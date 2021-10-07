@@ -134,10 +134,8 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.tuningC
         )
 
-        # todo need to also check path_test
         self.ui.btn_test.enabled = success
 
-        # todo need to also check path_input
         self.ui.btn_mean.enabled = success
         self.ui.btn_kde.enabled = success
         self.ui.btn_corr.enabled = success
@@ -234,21 +232,6 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """Called when the application closes and the module widget is destroyed."""
         self.removeObservers()
 
-    def enter(self):
-        """Called each time the user opens this module."""
-        # # Make sure parameter node exists and observed
-        # self.initializeParameterNode()
-
-    def exit(self):
-        """Called each time the user opens a different module."""
-        # # Do not react to parameter node changes (GUI wlil be updated when the user
-        # # enters into the module)
-        # self.removeObserver(
-        #     self._parameterNode,
-        #     vtk.vtkCommand.ModifiedEvent,
-        #     self.updateGUIFromParameterNode,
-        # )
-
     def onSceneStartClose(self, caller, event):
         """Called just before the scene is closed."""
         # # Parameter node will be reset, do not use it anymore
@@ -260,14 +243,6 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # # parameter node immediately
         # if self.parent.isEntered:
         #     self.initializeParameterNode()
-
-    def updateGUIFromParameterNode(self, caller=None, event=None):
-        """This method is called whenever parameter node is changed.
-        The module GUI is updated to show the current state of the parameter node.
-        """
-
-    def onApplyButton(self):
-        """Run processing when user clicks "Apply" button."""
 
 
 class DWDLogic(ScriptedLoadableModuleLogic):
@@ -408,7 +383,7 @@ class DWDLogic(ScriptedLoadableModuleLogic):
         plots = slicer.modules.plots.logic()
 
         mgr = slicer.app.layoutManager()
-        # mgr.setLayout(plots.GetLayoutWithPlot(mgr.layout))
+        mgr.setLayout(plots.GetLayoutWithPlot(mgr.layout))
 
         widget = mgr.plotWidget(0)
         viewNode = widget.mrmlPlotViewNode()
