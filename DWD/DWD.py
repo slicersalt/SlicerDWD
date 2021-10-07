@@ -202,16 +202,22 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         kde_table = self.logic.table(kde_results, 'DWD Results KDE')
 
         chart = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLPlotChartNode')
-        chart.SetTitle('A Simple KDE')
+        chart.SetTitle('DWD Distance Distribution')
         chart.SetXAxisTitle('Distance')
         chart.SetYAxisTitle('Density')
 
-        scatter = self.logic.scatterPlot(chart, results_table, 'distance', 'rand')
+        scatter = self.logic.scatterPlot(
+            chart, results_table, 'distance', 'rand',
+            name='Samples'
+        )
         scatter.SetLineStyle(scatter.LineStyleNone)
         scatter.SetMarkerStyle(scatter.MarkerStyleCross)
         scatter.SetColor(0, 0, 0)
 
-        full = self.logic.scatterPlot(chart, kde_table, 'x', 'all')
+        full = self.logic.scatterPlot(
+            chart, kde_table, 'x', 'all',
+            name='All Classes KDE'
+        )
         full.SetColor(0, 0, 0)
 
         colors = [
@@ -220,7 +226,10 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         ]
 
         for key, color in zip(kernels, colors):
-            plot = self.logic.scatterPlot(chart, kde_table, 'x', key)
+            plot = self.logic.scatterPlot(
+                chart, kde_table, 'x', key,
+                name=key + ' KDE'
+            )
             plot.SetColor(*color)
 
         self.logic.show(chart)
@@ -366,8 +375,8 @@ class DWDLogic(ScriptedLoadableModuleLogic):
 
         return tableNode
 
-    def scatterPlot(self, chartNode, tableNode, x, y):
-        psn = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLPlotSeriesNode')
+    def scatterPlot(self, chartNode, tableNode, x, y, name='Series'):
+        psn = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLPlotSeriesNode', name)
         psn.SetAndObserveTableNodeID(tableNode.GetID())
         psn.SetXColumnName(x)
         psn.SetYColumnName(y)
