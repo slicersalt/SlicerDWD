@@ -154,25 +154,18 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         mean = self.logic.meanShape(self.trainCases, factor=50.0)
 
-        model = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode')
+        model = slicer.mrmlScene.AddNewNodeByClass(
+            'vtkMRMLModelNode', 'Projected Mean Shape'
+        )
         model.CreateDefaultDisplayNodes()
 
         model.SetAndObservePolyData(mean.VTKObject)
-        model.GetDisplayNode().SetVisibility(True)
+        model.GetDisplayNode().SetVisibility(False)
 
-        mgr = slicer.app.layoutManager()
-        mgr.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUp3DView)
-
-        ## Ideally this would Launch the CLI ShapePopulationViewer
-        ## See SVA for how to invoke SPV.
-        ## https://github.com/NIRALUser/ShapeVariationAnalyzer/blob/master/ShapeVariationAnalyzer/ShapeVariationAnalyzer.py#L742-L764
-        ## Fails with "Could not find logic for module 'ShapePopulationViewer'"
-        ## Can manually select the model in SPV though.
-
-        # parameters = {}
-        # parameters["vtkFiles"] = mean.VTKObject
-        # module = slicer.modules.shapepopulationviewer
-        # slicer.cli.run(module, None, parameters, wait_for_completion=True)
+        module = slicer.modules.shapepopulationviewer
+        spv = module.widgetRepresentation()
+        slicer.util.selectModule(module)
+        spv.loadModel(model)
 
     def kdeClicked(self):
         """Called when the "Show KDE" button is clicked."""
