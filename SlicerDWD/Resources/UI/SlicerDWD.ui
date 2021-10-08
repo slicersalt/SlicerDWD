@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
-  <class>DWD</class>
-  <widget class="qMRMLWidget" name="DWD">
+  <class>SlicerDWD</class>
+  <widget class="qMRMLWidget" name="SlicerDWD">
     <layout class="QVBoxLayout">
       <item>
         <widget class="ctkCollapsibleButton">

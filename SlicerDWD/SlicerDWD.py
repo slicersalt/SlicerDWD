@@ -19,7 +19,7 @@ except ModuleNotFoundError:
     import dwd
 
 
-class DWD(ScriptedLoadableModule):
+class SlicerDWD(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
     https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
     """
@@ -43,7 +43,7 @@ Wang and Zou 2018</a>.
 """
 
 
-class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
+class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """Uses ScriptedLoadableModuleWidget base class, available at:
     https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
     """
@@ -68,7 +68,7 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Load widget from .ui file (created by Qt Designer).
         # Additional widgets can be instantiated manually and added to self.layout.
-        uiWidget = slicer.util.loadUI(self.resourcePath("UI/DWD.ui"))
+        uiWidget = slicer.util.loadUI(self.resourcePath("UI/SlicerDWD.ui"))
         self.layout.addWidget(uiWidget)
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
@@ -79,7 +79,7 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Create logic class. Logic implements all computations that should be possible to run
         # in batch mode, without a graphical user interface.
-        self.logic = DWDLogic()
+        self.logic = SlicerDWDLogic()
 
         # Connections
 
@@ -247,7 +247,7 @@ class DWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         #     self.initializeParameterNode()
 
 
-class DWDLogic(ScriptedLoadableModuleLogic):
+class SlicerDWDLogic(ScriptedLoadableModuleLogic):
     """This class should implement all the actual computation done by your module.
     The interface should be such that other python code can import this class and
     make use of the functionality without requiring an instance of the Widget. Uses

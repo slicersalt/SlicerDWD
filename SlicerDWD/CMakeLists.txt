@@ -1,9 +1,9 @@
 #-----------------------------------------------------------------------------
-set(MODULE_NAME DWD)
+set(MODULE_NAME SlicerDWD)
 
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
-  SlicerDWD.py
+  ${MODULE_NAME}.py
   )
 
 set(MODULE_PYTHON_RESOURCES
