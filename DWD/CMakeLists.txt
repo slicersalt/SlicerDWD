@@ -3,7 +3,7 @@ set(MODULE_NAME DWD)
 
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
-  ${MODULE_NAME}.py
+  SlicerDWD.py
   )
 
 set(MODULE_PYTHON_RESOURCES
