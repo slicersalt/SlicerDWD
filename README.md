@@ -6,7 +6,10 @@ Shape Analysis with DWD (Distance Weighted Discrimination), using the [`dwd` Pyt
 ![DWD Direction Visualization][vectors]
 
 [dwd]: https://github.com/slicersalt/dwd
-[vectors]: ./img/Vectors.png
+[vectors]: https://raw.githubusercontent.com/slicersalt/SlicerDWD/main/img/Vectors.png
+
+[marron-et-al]: https://amstat.tandfonline.com/doi/abs/10.1198/016214507000001120
+[wang-zou]: https://rss.onlinelibrary.wiley.com/doi/full/10.1111/rssb.12244
 
 # Installation
 
