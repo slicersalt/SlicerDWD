@@ -1,9 +1,13 @@
 import csv
+import random
+import os.path
 import warnings
 
 import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
+
+import qt
 
 import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
@@ -56,9 +60,10 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
 
         self.logic = None
-
-        self.trainCases = None
-        self.testCases = None
+        self.classifier = None
+        self.trainData = None
+        self.testData = None
+        self.metrics = None
 
     def setup(self):
         """Called when the user opens the module the first time and the widget is
@@ -91,68 +96,151 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose
         )
 
-        self.ui.path_train.currentPathChanged.connect(self.trainPathChanged)
-        self.ui.chk_autoTune.stateChanged.connect(self.autoTuneStateChanged)
-        self.ui.btn_train.clicked.connect(self.trainClicked)
+        # self.ui.pathMetrics.currentPathChanged.connect()
 
-        self.ui.path_test.currentPathChanged.connect(self.testPathChanged)
+        # couple checkboxes with optional parameters
+        self.ui.chkSample.stateChanged.connect(self.updateSpnSample)
+        self.ui.chkSample.stateChanged.connect(self.updatePathTest)
+        self.ui.chkAutoTune.stateChanged.connect(self.updateSpnTuningC)
+        self.ui.chkSaveResults.stateChanged.connect(self.updatePathResults)
 
-        self.ui.btn_mean.clicked.connect(self.meanClicked)
-        self.ui.btn_kde.clicked.connect(self.kdeClicked)
+        # changing these may affect if we can train
+        self.ui.pathTrain.currentPathChanged.connect(self.updateBtnTrain)
 
-        self.ui.tbl_stats.insertColumn(0)
-        self.ui.tbl_stats.insertRow(0)
-        self.ui.tbl_stats.insertRow(0)
+        # changing these may affect if we can test
+        self.ui.chkSaveResults.stateChanged.connect(self.updateBtnTest)
+        self.ui.pathResults.currentPathChanged.connect(self.updateBtnTest)
+        self.ui.chkSample.stateChanged.connect(self.updateBtnTest)
+        self.ui.pathTest.currentPathChanged.connect(self.updateBtnTest)
 
-        self.ui.tbl_stats.horizontalHeader().visible = False
-        self.ui.tbl_stats.setVerticalHeaderLabels(['Accuracy', 'Errors'])
+        # register "real" actions
+        self.ui.btnTrain.clicked.connect(self.btnTrainClicked)
+        self.ui.btnTest.clicked.connect(self.btnTestClicked)
+        self.ui.btnMean.clicked.connect(self.btnMeanClicked)
+        self.ui.btnKDE.clicked.connect(self.btnKDEClicked)
 
-    def autoTuneStateChanged(self, enabled):
-        """Called when the "Auto Tune" checkbox is changed."""
-        self.ui.spn_tuningC.enabled = not enabled
+        # self.ui.tblStats.insertColumn(0)
+        # self.ui.tblStats.insertRow(0)
+        # self.ui.tblStats.insertRow(0)
+        #
+        # self.ui.tblStats.horizontalHeader().visible = False
+        # self.ui.tblStats.setVerticalHeaderLabels(['Accuracy', 'Errors'])
+
+        ## to make an item uneditable
+        # it = self.ui.tblStats.item(0,0)
+        # it.setFlags(it.flags() & ~qt.Qt.ItemIsEditable)
 
     @property
-    def tuningC(self):
-        if self.ui.chk_autoTune.checked:
-            return 'auto'
-        return self.ui.spn_tuningC.value
+    def trainDataReady(self):
+        """Whether inputs are ready to train"""
+        fileValid = os.path.isfile(self.ui.pathTrain.currentPath)
+        return fileValid
 
-    def trainPathChanged(self, path):
-        """Called when the training dataset path is changed."""
-        try:
-            self.trainCases = self.logic.buildCases(path)
-            self.ui.btn_train.enabled = bool(self.trainCases)
-        except (OSError, ValueError):
-            slicer.util.errorDisplay('Failed to load training dataset {}'.format(path))
-            self.ui.btn_train.enabled = False
+    @property
+    def testDataReady(self):
+        """Whether inputs are ready to test"""
+        sampling = self.ui.chkSample.checked
+        fileValid = os.path.isfile(self.ui.pathTest.currentPath)
+        return (sampling and self.trainDataReady) or fileValid
 
-    def trainClicked(self):
+    @property
+    def testResultsReady(self):
+        """Whether outputs are ready to test"""
+        saving = self.ui.chkSaveResults.checked
+        fileValid = os.path.isfile(self.ui.pathResults.currentPath)
+        return not saving or fileValid
+
+    def updateBtnTrain(self):
+        self.ui.btnTrain.enabled = self.trainDataReady
+
+    def updateBtnTest(self):
+        self.ui.btnTest.enabled = all((
+            self.classifier,
+            self.testDataReady,
+            self.testResultsReady
+        ))
+
+    def updateBtnMean(self):
+        self.ui.btnMean.enabled = self.classifier and self.testData
+
+    def updateBtnKDE(self):
+        self.ui.btnKDE.enabled = self.classifier and self.testData
+
+    def updateBtnCorr(self):
+        pass
+
+    def updateComCorr(self):
+        pass
+
+    def updateSpnSample(self):
+        sampling = self.ui.chkSample.checked
+        self.ui.spnSample.enabled = sampling
+        self.ui.spnSampleLabel.enabled = sampling
+
+    def updatePathTest(self):
+        sampling = self.ui.chkSample.checked
+        self.ui.pathTest.enabled = not sampling
+        self.ui.pathTestLabel.enabled = not sampling
+
+    def updateSpnTuningC(self):
+        autotuning = self.ui.chkAutoTune.checked
+        self.ui.spnTuningC.enabled = not autotuning
+        self.ui.spnTuningC.enabled = not autotuning
+
+        if self.classifier:
+            self.ui.spnTuningC.value = self.classifier.C
+
+    def updatePathResults(self):
+        saving = self.ui.chkSaveResults.checked
+        self.ui.pathResults.enabled = saving
+        self.ui.pathResultsLabel.enabled = saving
+
+    def btnTrainClicked(self):
         """Called when the "Train Classifier" button is clicked."""
 
-        success = self.logic.train(
-            self.trainCases,
-            self.tuningC
-        )
+        self.classifier = None
 
-        self.ui.btn_test.enabled = success
+        self.trainData = self.logic.buildCases(self.ui.pathTrain.currentPath)
+        if self.ui.chkSample.checked:
+            part = self.ui.spnSample.value / 100
+            self.trainData, self.testData = self.logic.splitCases(self.trainData, part)
 
-        self.ui.btn_mean.enabled = success
-        self.ui.btn_kde.enabled = success
-        self.ui.btn_corr.enabled = success
+        c = 'auto' if self.ui.chkAutoTune.checked else self.ui.spnTuningC.value
 
-    def testPathChanged(self, path):
-        """Called when the testing dataset path is changed."""
-        try:
-            self.testCases = self.logic.buildCases(path)
-            self.ui.btn_test.enabled = bool(self.testCases)
-        except (OSError, ValueError):
-            slicer.util.errorDisplay('Failed to load testing dataset {}'.format(path))
-            self.ui.btn_test.enabled = False
+        self.classifier = self.logic.train(self.trainData, c)
+        self.ui.spnTuningC.value = self.classifier.C
 
-    def meanClicked(self):
-        """Called when the 'Compute Mean" button is clicked."""
+        self.classifierUpdated()
 
-        mean = self.logic.meanShape(self.trainCases, factor=50.0)
+    def classifierUpdated(self):
+        """Update any UI that should be enabled or disabled when the classifier is
+        created or removed.
+        """
+        self.updateBtnTest()
+        self.updateBtnMean()
+        self.updateBtnKDE()
+        self.updateBtnCorr()
+        self.updateComCorr()
+
+    def btnTestClicked(self):
+        """Called when the "Test Classifier" button is clicked."""
+
+        if not self.ui.chkSample.checked:
+            self.testData = self.logic.buildCases(self.ui.pathTrain.currentPath)
+
+        results = self.logic.compute(self.classifier, self.testData)
+        # if chkSaveResults, save to pathResults
+
+        # populate self.ui.tblStats with confusion matrix and other statistics
+        # see https://github.com/slicersalt/SlicerDWD/issues/6
+
+    def btnMeanClicked(self):
+        """Called when the "Compute Projected Mean Shape" button is clicked."""
+
+        if not self.ui.chkSample.checked:
+            self.testData = self.logic.buildCases(self.ui.pathTrain.currentPath)
+
+        mean = self.logic.meanShape(self.classifier, self.testData, factor=50.0)
 
         model = slicer.mrmlScene.AddNewNodeByClass(
             'vtkMRMLModelNode', 'Projected Mean Shape'
@@ -167,16 +255,19 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         slicer.util.selectModule(module)
         spv.loadModel(model)
 
-    def kdeClicked(self):
+    def btnKDEClicked(self):
         """Called when the "Show KDE" button is clicked."""
 
-        results = self.logic.compute(self.trainCases)
-        kernel_all = scipy.stats.gaussian_kde(
-            results['distance']
-        )
+        if not self.ui.chkSample.checked:
+            self.testData = self.logic.buildCases(self.ui.pathTrain.currentPath)
+
+        results = self.logic.compute(self.classifier, self.testData)
+        kernel_all = scipy.stats.gaussian_kde(results['distance'])
         results['rand'] = np.random.normal(
             size=results['distance'].shape
         ) * kernel_all(results['distance']) * 0.05 + 0.007
+
+        # todo encapsulate kde plot work
 
         kde_space = np.linspace(results['distance'].min(), results['distance'].max())
         kernels = {
@@ -262,13 +353,32 @@ class SlicerDWDLogic(ScriptedLoadableModuleLogic):
         """
         super().__init__(self)
 
-        self.classifier = None
+    # region dataset util todo encapsulate
 
     def buildCases(self, csv_path):
         with open(csv_path, 'r') as f:
             reader = csv.reader(f)
             # could do with list() but this enforces row structure
             return [(path, group) for path, group in reader]
+
+    def splitCases(self, cases, test_part):
+        random.shuffle(cases)
+        idx = int(len(cases) * test_part)
+        test, train = cases[:idx], cases[idx:]
+        return train, test
+
+    def make_xy(self, cases):
+        X = np.array([
+            self.read_vtk(path).Points.flatten()
+            for path, group in cases
+        ])
+        y = np.array([group for path, group in cases])
+
+        return X, y
+
+    # endregion
+
+    # region io util todo encapsulate
 
     def read_vtk(self, path):
         reader = vtk.vtkPolyDataReader()
@@ -287,37 +397,26 @@ class SlicerDWDLogic(ScriptedLoadableModuleLogic):
         res.VTKObject.DeepCopy(pdata.VTKObject)
         return res
 
-    def make_xy(self, cases):
-        X = np.array([
-            self.read_vtk(path).Points.flatten()
-            for path, group in cases
-        ])
-        y = np.array([group for path, group in cases])
+    # endregion
 
-        return X, y
+    def train(self, trainData, c):
+        X, y = self.make_xy(trainData)
 
-    def train(self, cases, c='auto'):
-        """Train the model."""
+        classifier = dwd.DWD(c)
 
-        self.classifier = None
-
-        slicer.util.showStatusMessage('DWD: Loading Dataset', 2000)
-        X, y = self.make_xy(cases)
-
-        slicer.util.showStatusMessage('DWD: Fitting classifier', 2000)
-        self.classifier = dwd.DWD(c)
         with warnings.catch_warnings(record=True):
-            self.classifier.fit(X, y)
-        slicer.util.showStatusMessage('DWD: {}'.format(self.classifier), 2000)
+            classifier.fit(X, y)
 
-        return True
+        slicer.util.showStatusMessage('DWD: {}'.format(classifier), 5000)
 
-    def meanShape(self, cases, factor=1.0):
+        return classifier
+
+    def meanShape(self, classifier, cases, factor=1.0):
         base = self.read_vtk(cases[0][0])
         X, _ = self.make_xy(cases)
 
         shape = base.Points.shape
-        d, i = self.direction
+        d, i = self.direction(classifier)
 
         mean = np.mean(X, axis=0)
         mean -= d * (i - np.dot(mean, d))
@@ -332,12 +431,12 @@ class SlicerDWDLogic(ScriptedLoadableModuleLogic):
 
         return out
 
-    def compute(self, cases):
-        d, i = self.direction
+    def compute(self, classifier, cases):
+        d, i = self.direction(classifier)
         X, y = self.make_xy(cases)
 
         actual = y
-        predict = self.classifier.predict(X)
+        predict = classifier.predict(X)
         distance = X.dot(d) - i
 
         return {
@@ -346,16 +445,17 @@ class SlicerDWDLogic(ScriptedLoadableModuleLogic):
             'distance': distance
         }
 
-    @property
-    def direction(self):
+    def direction(self, classifier):
         """Return the DWD direction and intercept. The separating hyperplane is of the
         form 'p.d = d.i', where '.' is the dot product. If 'p.d < d.i', then 'p' is label
         0. If 'p.d > d.i', then 'p' is label 1.
         """
 
-        direction = self.classifier.coef_.reshape(-1)
-        intercept = -float(self.classifier.intercept_)
+        direction = classifier.coef_.reshape(-1)
+        intercept = -float(classifier.intercept_)
         return direction, intercept
+
+    # region plot util todo encapsulate
 
     def table(self, columns, name='Table'):
         tableNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLTableNode', name)
@@ -390,6 +490,8 @@ class SlicerDWDLogic(ScriptedLoadableModuleLogic):
         widget = mgr.plotWidget(0)
         viewNode = widget.mrmlPlotViewNode()
         viewNode.SetPlotChartNodeID(chartNode.GetID())
+
+    # endregion
 
 
 class DWDTest(ScriptedLoadableModuleTest):

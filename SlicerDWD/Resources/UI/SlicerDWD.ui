@@ -6,7 +6,7 @@
       <item>
         <widget class="ctkCollapsibleButton">
           <property name="text">
-            <string>Training</string>
+            <string>Inputs</string>
           </property>
           <layout class="QFormLayout">
             <item row="0" column="0">
@@ -17,11 +17,81 @@
               </widget>
             </item>
             <item row="0" column="1">
-              <widget class="ctkPathLineEdit" name="path_train">
+              <widget class="ctkPathLineEdit" name="pathTrain">
               </widget>
             </item>
-            <item row="1" column="0" colspan="2">
-              <widget class="QCheckBox" name="chk_autoTune">
+            <item row="1" column="0">
+              <widget class="QCheckBox" name="chkSample">
+                <property name="text">
+                  <string>Split Training and Testing Data</string>
+                </property>
+                <property name="checked">
+                  <bool>true</bool>
+                </property>
+              </widget>
+            </item>
+            <item row="2" column="0">
+              <widget class="QLabel" name="spnSampleLabel">
+                <property name="text">
+                  <string>Testing Data Sample Size (%)</string>
+                </property>
+              </widget>
+            </item>
+            <item row="2" column="1">
+              <widget class="QSpinBox" name="spnSample">
+                <property name="minimum">
+                  <number>0</number>
+                </property>
+                <property name="maximum">
+                  <number>100</number>
+                </property>
+                <property name="singleStep">
+                  <number>5</number>
+                </property>
+                <property name="value">
+                  <number>30</number>
+                </property>
+              </widget>
+            </item>
+            <item row="3" column="0">
+              <widget class="QLabel" name="pathTestLabel">
+                <property name="text">
+                  <string>Testing Dataset</string>
+                </property>
+                <property name="enabled">
+                  <bool>false</bool>
+                </property>
+              </widget>
+            </item>
+            <item row="3" column="1">
+              <widget class="ctkPathLineEdit" name="pathTest">
+                <property name="enabled">
+                  <bool>false</bool>
+                </property>
+              </widget>
+            </item>
+            <item row="4" column="0">
+              <widget class="QLabel">
+                <property name="text">
+                  <string>Additional Metrics</string>
+                </property>
+              </widget>
+            </item>
+            <item row="4" column="1">
+              <widget class="ctkPathLineEdit" name="pathMetrics">
+              </widget>
+            </item>
+          </layout>
+        </widget>
+      </item>
+      <item>
+        <widget class="ctkCollapsibleButton">
+          <property name="text">
+            <string>Training</string>
+          </property>
+          <layout class="QFormLayout">
+            <item row="0" column="0" colspan="2">
+              <widget class="QCheckBox" name="chkAutoTune">
                 <property name="text">
                   <string>Automatic Tuning</string>
                 </property>
@@ -30,15 +100,24 @@
                 </property>
               </widget>
             </item>
-            <item row="2" column="0">
-              <widget class="QLabel">
+            <item row="1" column="0">
+              <widget class="QLabel" name="spnTuningCLabel">
                 <property name="text">
                   <string>Tuning Parameter (C)</string>
                 </property>
+                <property name="enabled">
+                  <bool>false</bool>
+                </property>
               </widget>
             </item>
-            <item row="2" column="1">
-              <widget class="QDoubleSpinBox" name="spn_tuningC">
+            <item row="1" column="1">
+              <widget class="QDoubleSpinBox" name="spnTuningC">
+                <property name="enabled">
+                  <bool>false</bool>
+                </property>
+                <property name="decimals">
+                  <number>5</number>
+                </property>
                 <property name="minimum">
                   <double>0.000000000000000</double>
                 </property>
@@ -46,72 +125,19 @@
                   <double>1.000000000000000</double>
                 </property>
                 <property name="singleStep">
-                  <double>0.010000000000000</double>
+                  <double>0.001000000000000</double>
                 </property>
                 <property name="value">
-                  <double>0.010000000000000</double>
-                </property>
-                <property name="enabled">
-                  <bool>false</bool>
+                  <double>0.002500000000000</double>
                 </property>
               </widget>
             </item>
-            <item row="4" column="0" colspan="2">
-              <widget class="QPushButton" name="btn_train">
+            <item row="2" column="0" colspan="2">
+              <widget class="QPushButton" name="btnTrain">
                 <property name="text">
                   <string>Train Classifier</string>
                 </property>
-              </widget>
-            </item>
-            <item row="5" column="0" colspan="2">
-              <widget class="QPushButton" name="btn_mean">
-                <property name="text">
-                  <string>Compute Projected Mean Shape</string>
-                </property>
                 <property name="enabled">
-                  <bool>false</bool>
-                </property>
-              </widget>
-            </item>
-            <item row="6" column="0" colspan="2">
-              <widget class="QPushButton" name="btn_kde">
-                <property name="text">
-                  <string>Compute KDE</string>
-                </property>
-                <property name="enabled">
-                  <bool>false</bool>
-                </property>
-              </widget>
-            </item>
-            <item row="7" column="0">
-              <widget class="QLabel">
-                <property name="text">
-                  <string>Extra Metrics Dataset</string>
-                </property>
-                <property name="text">
-                  <bool>false</bool>
-                </property>
-                <property name="visible">
-                  <bool>false</bool>
-                </property>
-              </widget>
-            </item>
-            <item row="7" column="1">
-              <widget class="ctkPathLineEdit" name="path_metrics">
-                <property name="visible">
-                  <bool>false</bool>
-                </property>
-              </widget>
-            </item>
-            <item row="8" column="0" colspan="2">
-              <widget class="QPushButton" name="btn_corr">
-                <property name="text">
-                  <string>Correlate with Existing Metrics</string>
-                </property>
-                <property name="enabled">
-                  <bool>false</bool>
-                </property>
-                <property name="visible">
                   <bool>false</bool>
                 </property>
               </widget>
@@ -124,46 +150,86 @@
           <property name="text">
             <string>Testing</string>
           </property>
-          <property name="visible">
-            <bool>false</bool>
-          </property>
           <layout class="QFormLayout">
             <item row="0" column="0">
-              <widget class="QLabel">
+              <widget class="QCheckBox" name="chkSaveResults">
                 <property name="text">
-                  <string>Test Dataset</string>
+                  <string>Save Test Results</string>
+                </property>
+                <property name="checked">
+                  <bool>true</bool>
                 </property>
               </widget>
             </item>
-            <item row="0" column="1">
-              <widget class="ctkPathLineEdit" name="path_test"/>
-            </item>
             <item row="1" column="0">
-              <widget class="QLabel">
+              <widget class="QLabel" name="pathResultsLabel">
                 <property name="text">
                   <string>Test Results</string>
                 </property>
               </widget>
             </item>
             <item row="1" column="1">
-              <widget class="ctkPathLineEdit" name="path_testResults"/>
+              <widget class="ctkPathLineEdit" name="pathResults"/>
             </item>
             <item row="2" column="0">
               <widget class="QLabel">
                 <property name="text">
                   <string>Testing Statistics</string>
                 </property>
+                <property name="visible">
+                  <bool>false</bool>
+                </property>
               </widget>
             </item>
             <item row="3" column="0" colspan="2">
-              <widget class="QTableWidget" name="tbl_stats">
+              <widget class="QTableWidget" name="tblStats">
+                <property name="visible">
+                  <bool>false</bool>
+                </property>
               </widget>
             </item>
             <item row="4" column="0" colspan="2">
-              <widget class="QPushButton" name="btn_test">
+              <widget class="QPushButton" name="btnTest">
                 <property name="text">
                   <string>Test Classifier</string>
                 </property>
+                <property name="enabled">
+                  <bool>false</bool>
+                </property>
+              </widget>
+            </item>
+            <item row="5" column="0" colspan="2">
+              <widget class="QPushButton" name="btnMean">
+                <property name="text">
+                  <string>Compute Projected Mean Shape</string>
+                </property>
+                <property name="enabled">
+                  <bool>false</bool>
+                </property>
+              </widget>
+            </item>
+            <item row="6" column="0" colspan="2">
+              <widget class="QPushButton" name="btnKDE">
+                <property name="text">
+                  <string>Compute KDE</string>
+                </property>
+                <property name="enabled">
+                  <bool>false</bool>
+                </property>
+              </widget>
+            </item>
+            <item row="8" column="0">
+              <widget class="QPushButton" name="btnCorr">
+                <property name="text">
+                  <string>Correlate with</string>
+                </property>
+                <property name="enabled">
+                  <bool>false</bool>
+                </property>
+              </widget>
+            </item>
+            <item row="8" column="1">
+              <widget class="QComboBox" name="comCorr">
                 <property name="enabled">
                   <bool>false</bool>
                 </property>
