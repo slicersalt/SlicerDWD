@@ -143,8 +143,10 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def testResultsReady(self):
         """Whether outputs are ready to test"""
         saving = self.ui.chkSaveResults.checked
-        fileValid = os.path.isfile(self.ui.pathResults.currentPath)
-        return not saving or fileValid
+        dirName = os.path.dirname(self.ui.pathResults.currentPath)
+        dirValid = os.path.isdir(dirName)
+        # fileValid = os.path.isfile(self.ui.pathResults.currentPath)
+        return not saving or dirValid
 
     def updateBtnTrain(self):
         self.ui.btnTrain.enabled = self.trainDataReady
@@ -239,7 +241,8 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.populateStatsTable(self.ui.tblTestStats, results)
         self.populateResultsTable(self.ui.tblTestResults, results)
 
-        # if chkSaveResults, save to pathResults
+        if self.ui.chkSaveResults.checked:
+            self.logic.saveResults(results, self.ui.pathResults.currentPath)
 
     def btnMeanClicked(self):
         """Called when the "Compute Projected Mean Shape" button is clicked."""
@@ -390,7 +393,6 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             tbl.setItem(i, 2, qt.QTableWidgetItem(predict))
             tbl.setItem(i, 3, qt.QTableWidgetItem(distance))
 
-
     def cleanup(self):
         """Called when the application closes and the module widget is destroyed."""
         self.removeObservers()
@@ -516,6 +518,27 @@ class SlicerDWDLogic(ScriptedLoadableModuleLogic):
             'predict': predict,
             'distance': distance
         }
+
+    def saveResults(self, results, path):
+        with open(path, 'w') as f:
+            writer = csv.DictWriter(f, [
+                'Filename', 'Actual', 'Predict', 'Distance'
+            ])
+
+            writer.writeheader()
+
+            for filename, actual, predict, distance in zip(
+                    results['filename'],
+                    results['actual'],
+                    results['predict'],
+                    results['distance']
+            ):
+                writer.writerow({
+                    'Filename': filename,
+                    'Actual': actual,
+                    'Predict': predict,
+                    'Distance': distance
+                })
 
     def direction(self, classifier):
         """Return the DWD direction and intercept. The separating hyperplane is of the
