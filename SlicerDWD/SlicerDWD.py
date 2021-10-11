@@ -12,6 +12,8 @@ import qt
 import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
 
+import ctk
+
 import numpy as np
 
 import scipy
@@ -100,8 +102,6 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose
         )
 
-        # self.ui.pathMetrics.currentPathChanged.connect()
-
         # couple checkboxes with optional parameters
         self.ui.chkSample.stateChanged.connect(self.updateSpnSample)
         self.ui.chkSample.stateChanged.connect(self.updatePathTest)
@@ -123,8 +123,17 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.btnMean.clicked.connect(self.btnMeanClicked)
         self.ui.btnKDE.clicked.connect(self.btnKDEClicked)
 
+        # create bold "header" font for stats tables
         self.boldFont = self.ui.SlicerDWD.font
         self.boldFont.setWeight(qt.QFont.Bold)
+
+        # setup ctkPathLineEdit filters. Ideally this would be done in QML but the
+        # properties don't seem to be set up so that's possible.
+        self.ui.pathResults.filters |= ctk.ctkPathLineEdit.Writable
+        self.ui.pathTrain.nameFilters += '*.csv',
+        self.ui.pathTest.nameFilters += '*.csv',
+        self.ui.pathMetrics.nameFilters += '*.csv',
+        self.ui.pathResults.nameFilters += '*.csv',
 
     @property
     def trainDataReady(self):
