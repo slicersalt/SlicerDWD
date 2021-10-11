@@ -237,7 +237,7 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         results = self.logic.compute(self.classifier, self.testData)
         self.populateStatsTable(self.ui.tblTestStats, results)
-        self.populateResultsTable(self.ui.tblTestResults, results, self.testData)
+        self.populateResultsTable(self.ui.tblTestResults, results)
 
         # if chkSaveResults, save to pathResults
 
@@ -370,25 +370,25 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         tbl.resizeColumnToContents(0)
 
-    def populateResultsTable(self, tbl, results, data):
-        tbl.clear()
+    def populateResultsTable(self, tbl, results):
+        count = len(results['distance'])
 
-        while tbl.rowCount > len(data):
+        while tbl.rowCount > count:
             tbl.removeRow(0)
 
-        while tbl.rowCount < len(data):
+        while tbl.rowCount < count:
             tbl.insertRow(0)
 
-        for i in range(len(data)):
-            filename = os.path.basename(data[i][0])
-            actual = results['actual'][i]
-            predict = results['predict'][i]
-            distance = results['distance'][i]
+        for i in range(count):
+            filename = os.path.basename(results['filename'][i])
+            actual = str(results['actual'][i])
+            predict = str(results['predict'][i])
+            distance = '{:.3f}'.format(results['distance'][i])
 
-            tbl.setItem(i, 0, qt.QTableWidgetItem('{}'.format(filename)))
-            tbl.setItem(i, 1, qt.QTableWidgetItem('{}'.format(actual)))
-            tbl.setItem(i, 2, qt.QTableWidgetItem('{}'.format(predict)))
-            tbl.setItem(i, 3, qt.QTableWidgetItem('{:.3f}'.format(distance)))
+            tbl.setItem(i, 0, qt.QTableWidgetItem(filename))
+            tbl.setItem(i, 1, qt.QTableWidgetItem(actual))
+            tbl.setItem(i, 2, qt.QTableWidgetItem(predict))
+            tbl.setItem(i, 3, qt.QTableWidgetItem(distance))
 
 
     def cleanup(self):
@@ -505,11 +505,13 @@ class SlicerDWDLogic(ScriptedLoadableModuleLogic):
         d, i = self.direction(classifier)
         X, y = self.make_xy(cases)
 
+        filename = np.array([row[0] for row in cases])
         actual = y
         predict = classifier.predict(X)
         distance = X.dot(d) - i
 
         return {
+            'filename': filename,
             'actual': actual,
             'predict': predict,
             'distance': distance
