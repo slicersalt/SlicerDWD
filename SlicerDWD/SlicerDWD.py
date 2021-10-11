@@ -237,6 +237,7 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         results = self.logic.compute(self.classifier, self.testData)
         self.populateStatsTable(self.ui.tblTestStats, results)
+        self.populateResultsTable(self.ui.tblTestResults, results, self.testData)
 
         # if chkSaveResults, save to pathResults
 
@@ -368,6 +369,27 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             tbl.setItem(2 + i, 2, it)
 
         tbl.resizeColumnToContents(0)
+
+    def populateResultsTable(self, tbl, results, data):
+        tbl.clear()
+
+        while tbl.rowCount > len(data):
+            tbl.removeRow(0)
+
+        while tbl.rowCount < len(data):
+            tbl.insertRow(0)
+
+        for i in range(len(data)):
+            filename = os.path.basename(data[i][0])
+            actual = results['actual'][i]
+            predict = results['predict'][i]
+            distance = results['distance'][i]
+
+            tbl.setItem(i, 0, qt.QTableWidgetItem('{}'.format(filename)))
+            tbl.setItem(i, 1, qt.QTableWidgetItem('{}'.format(actual)))
+            tbl.setItem(i, 2, qt.QTableWidgetItem('{}'.format(predict)))
+            tbl.setItem(i, 3, qt.QTableWidgetItem('{:.3f}'.format(distance)))
+
 
     def cleanup(self):
         """Called when the application closes and the module widget is destroyed."""
