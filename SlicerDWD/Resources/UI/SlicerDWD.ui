@@ -142,6 +142,34 @@
                 </property>
               </widget>
             </item>
+            <item row="3" column="0" colspan="2">
+              <widget class="QTableWidget" name="tblTrainStats">
+                <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed"/>
+                </property>
+                <property name="maximumSize">
+                  <size>
+                    <width>16777215</width>
+                    <height>150</height>
+                  </size>
+                </property>
+                <property name="editTriggers">
+                  <set>QAbstractItemView::NoEditTriggers</set>
+                </property>
+                <property name="rowCount">
+                  <number>2</number>
+                </property>
+                <property name="columnCount">
+                  <number>3</number>
+                </property>
+                <attribute name="horizontalHeaderVisible">
+                  <bool>false</bool>
+                </attribute>
+                <attribute name="verticalHeaderVisible">
+                  <bool>false</bool>
+                </attribute>
+              </widget>
+            </item>
           </layout>
         </widget>
       </item>
@@ -182,7 +210,16 @@
               </widget>
             </item>
             <item row="3" column="0" colspan="2">
-              <widget class="QTableWidget" name="tblStats">
+              <widget class="QTableWidget" name="tblTestStats">
+                <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed"/>
+                </property>
+                <property name="maximumSize">
+                  <size>
+                    <width>16777215</width>
+                    <height>150</height>
+                  </size>
+                </property>
                 <property name="editTriggers">
                   <set>QAbstractItemView::NoEditTriggers</set>
                 </property>

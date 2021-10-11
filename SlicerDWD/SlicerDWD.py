@@ -123,35 +123,11 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.btnMean.clicked.connect(self.btnMeanClicked)
         self.ui.btnKDE.clicked.connect(self.btnKDEClicked)
 
-        tbl = self.ui.tblStats
-
-        self.boldFont = tbl.font
+        self.boldFont = self.ui.SlicerDWD.font
         self.boldFont.setWeight(qt.QFont.Bold)
 
-        it = qt.QTableWidgetItem('Accuracy')
-        it.setFont(self.boldFont)
-        it.setTextAlignment(qt.Qt.AlignCenter)
-        # it.setTextAlignment(qt.Qt.AlignRight | qt.Qt.AlignVCenter)
-        tbl.setItem(0, 0, it)
-
-        it = qt.QTableWidgetItem('Class')
-        it.setFont(self.boldFont)
-        it.setTextAlignment(qt.Qt.AlignCenter)
-        tbl.setItem(1, 0, it)
-
-        it = qt.QTableWidgetItem('Precision')
-        it.setFont(self.boldFont)
-        it.setTextAlignment(qt.Qt.AlignCenter)
-        it.setToolTip('The rate of cases predicted to be some class that are '
-                      'actually that class.')
-        tbl.setItem(1, 1, it)
-
-        it = qt.QTableWidgetItem('Recall')
-        it.setFont(self.boldFont)
-        it.setTextAlignment(qt.Qt.AlignCenter)
-        it.setToolTip('The rate of cases in some class that were predicted to '
-                      'be that class.')
-        tbl.setItem(1, 2, it)
+        self.setupTableHeaders(self.ui.tblTestStats)
+        self.setupTableHeaders(self.ui.tblTrainStats)
 
     @property
     def trainDataReady(self):
@@ -243,6 +219,9 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.classifierUpdated()
 
+        results = self.logic.compute(self.classifier, self.trainData)
+        self.populateTable(self.ui.tblTrainStats, results)
+
     def classifierUpdated(self):
         """Update any UI that should be enabled or disabled when the classifier is
         created or removed.
@@ -260,49 +239,7 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.testData = self.logic.buildCases(self.ui.pathTrain.currentPath)
 
         results = self.logic.compute(self.classifier, self.testData)
-
-        clss = np.unique(results['actual'])
-
-        # confusion = sklearn.metrics.confusion_matrix(
-        #     results['actual'], results['predict']
-        # )
-
-        tbl = self.ui.tblStats
-
-        while tbl.rowCount > 2:
-            tbl.removeRow(2)
-
-        accuracy = sklearn.metrics.accuracy_score(
-            results['actual'], results['predict']
-        )
-
-        it = qt.QTableWidgetItem()
-        it.setText(format(accuracy, '.2%'))
-        tbl.setItem(0, 1, it)
-
-        for i, cls in enumerate(clss):
-            precision = sklearn.metrics.precision_score(
-                results['actual'], results['predict'],
-                pos_label=cls
-            )
-            recall = sklearn.metrics.recall_score(
-                results['actual'], results['predict'],
-                pos_label=cls
-            )
-
-            tbl.insertRow(2 + i)
-
-            it = qt.QTableWidgetItem('{}'.format(cls))
-            it.setFont(self.boldFont)
-            tbl.setItem(2 + i, 0, it)
-
-            it = qt.QTableWidgetItem('{:.2%}'.format(precision))
-            tbl.setItem(2 + i, 1, it)
-
-            it = qt.QTableWidgetItem('{:.2%}'.format(recall))
-            tbl.setItem(2 + i, 2, it)
-
-        tbl.resizeColumnToContents(0)
+        self.populateTable(self.ui.tblTestStats, results)
 
         # if chkSaveResults, save to pathResults
 
@@ -396,6 +333,70 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         mgr = slicer.app.layoutManager()
         mgr.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUpPlotView)
+
+    def setupTableHeaders(self, tbl):
+        it = qt.QTableWidgetItem('Accuracy')
+        it.setFont(self.boldFont)
+        it.setTextAlignment(qt.Qt.AlignCenter)
+        # it.setTextAlignment(qt.Qt.AlignRight | qt.Qt.AlignVCenter)
+        tbl.setItem(0, 0, it)
+
+        it = qt.QTableWidgetItem('Class')
+        it.setFont(self.boldFont)
+        it.setTextAlignment(qt.Qt.AlignCenter)
+        tbl.setItem(1, 0, it)
+
+        it = qt.QTableWidgetItem('Precision')
+        it.setFont(self.boldFont)
+        it.setTextAlignment(qt.Qt.AlignCenter)
+        it.setToolTip('The rate of cases predicted to be some class that are '
+                      'actually that class.')
+        tbl.setItem(1, 1, it)
+
+        it = qt.QTableWidgetItem('Recall')
+        it.setFont(self.boldFont)
+        it.setTextAlignment(qt.Qt.AlignCenter)
+        it.setToolTip('The rate of cases in some class that were predicted to '
+                      'be that class.')
+        tbl.setItem(1, 2, it)
+
+    def populateTable(self, tbl, results):
+        clss = np.unique(results['actual'])
+
+        while tbl.rowCount > 2:
+            tbl.removeRow(2)
+
+        accuracy = sklearn.metrics.accuracy_score(
+            results['actual'], results['predict']
+        )
+
+        it = qt.QTableWidgetItem()
+        it.setText(format(accuracy, '.2%'))
+        tbl.setItem(0, 1, it)
+
+        for i, cls in enumerate(clss):
+            precision = sklearn.metrics.precision_score(
+                results['actual'], results['predict'],
+                pos_label=cls
+            )
+            recall = sklearn.metrics.recall_score(
+                results['actual'], results['predict'],
+                pos_label=cls
+            )
+
+            tbl.insertRow(2 + i)
+
+            it = qt.QTableWidgetItem('{}'.format(cls))
+            it.setFont(self.boldFont)
+            tbl.setItem(2 + i, 0, it)
+
+            it = qt.QTableWidgetItem('{:.2%}'.format(precision))
+            tbl.setItem(2 + i, 1, it)
+
+            it = qt.QTableWidgetItem('{:.2%}'.format(recall))
+            tbl.setItem(2 + i, 2, it)
+
+        tbl.resizeColumnToContents(0)
 
     def cleanup(self):
         """Called when the application closes and the module widget is destroyed."""
