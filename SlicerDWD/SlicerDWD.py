@@ -126,9 +126,6 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.boldFont = self.ui.SlicerDWD.font
         self.boldFont.setWeight(qt.QFont.Bold)
 
-        self.setupTableHeaders(self.ui.tblTestStats)
-        self.setupTableHeaders(self.ui.tblTrainStats)
-
     @property
     def trainDataReady(self):
         """Whether inputs are ready to train"""
@@ -220,7 +217,7 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.classifierUpdated()
 
         results = self.logic.compute(self.classifier, self.trainData)
-        self.populateTable(self.ui.tblTrainStats, results)
+        self.populateStatsTable(self.ui.tblTrainStats, results)
 
     def classifierUpdated(self):
         """Update any UI that should be enabled or disabled when the classifier is
@@ -239,7 +236,7 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.testData = self.logic.buildCases(self.ui.pathTrain.currentPath)
 
         results = self.logic.compute(self.classifier, self.testData)
-        self.populateTable(self.ui.tblTestStats, results)
+        self.populateStatsTable(self.ui.tblTestStats, results)
 
         # if chkSaveResults, save to pathResults
 
@@ -334,33 +331,7 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         mgr = slicer.app.layoutManager()
         mgr.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUpPlotView)
 
-    def setupTableHeaders(self, tbl):
-        it = qt.QTableWidgetItem('Accuracy')
-        it.setFont(self.boldFont)
-        it.setTextAlignment(qt.Qt.AlignCenter)
-        # it.setTextAlignment(qt.Qt.AlignRight | qt.Qt.AlignVCenter)
-        tbl.setItem(0, 0, it)
-
-        it = qt.QTableWidgetItem('Class')
-        it.setFont(self.boldFont)
-        it.setTextAlignment(qt.Qt.AlignCenter)
-        tbl.setItem(1, 0, it)
-
-        it = qt.QTableWidgetItem('Precision')
-        it.setFont(self.boldFont)
-        it.setTextAlignment(qt.Qt.AlignCenter)
-        it.setToolTip('The rate of cases predicted to be some class that are '
-                      'actually that class.')
-        tbl.setItem(1, 1, it)
-
-        it = qt.QTableWidgetItem('Recall')
-        it.setFont(self.boldFont)
-        it.setTextAlignment(qt.Qt.AlignCenter)
-        it.setToolTip('The rate of cases in some class that were predicted to '
-                      'be that class.')
-        tbl.setItem(1, 2, it)
-
-    def populateTable(self, tbl, results):
+    def populateStatsTable(self, tbl, results):
         clss = np.unique(results['actual'])
 
         while tbl.rowCount > 2:
@@ -386,8 +357,8 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
             tbl.insertRow(2 + i)
 
-            it = qt.QTableWidgetItem('{}'.format(cls))
-            it.setFont(self.boldFont)
+            it = tbl.item(0, 0).clone()  # copy "Accuracy" label style
+            it.setText('{}'.format(cls))
             tbl.setItem(2 + i, 0, it)
 
             it = qt.QTableWidgetItem('{:.2%}'.format(precision))
