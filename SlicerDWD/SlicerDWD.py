@@ -16,6 +16,8 @@ import numpy as np
 
 import scipy
 
+import sklearn.metrics
+
 try:
     import dwd
 except ModuleNotFoundError:
@@ -64,6 +66,8 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.trainData = None
         self.testData = None
         self.metrics = None
+
+        self.boldFont = None
 
     def setup(self):
         """Called when the user opens the module the first time and the widget is
@@ -119,16 +123,35 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.btnMean.clicked.connect(self.btnMeanClicked)
         self.ui.btnKDE.clicked.connect(self.btnKDEClicked)
 
-        # self.ui.tblStats.insertColumn(0)
-        # self.ui.tblStats.insertRow(0)
-        # self.ui.tblStats.insertRow(0)
-        #
-        # self.ui.tblStats.horizontalHeader().visible = False
-        # self.ui.tblStats.setVerticalHeaderLabels(['Accuracy', 'Errors'])
+        tbl = self.ui.tblStats
 
-        ## to make an item uneditable
-        # it = self.ui.tblStats.item(0,0)
-        # it.setFlags(it.flags() & ~qt.Qt.ItemIsEditable)
+        self.boldFont = tbl.font
+        self.boldFont.setWeight(qt.QFont.Bold)
+
+        it = qt.QTableWidgetItem('Accuracy')
+        it.setFont(self.boldFont)
+        it.setTextAlignment(qt.Qt.AlignCenter)
+        # it.setTextAlignment(qt.Qt.AlignRight | qt.Qt.AlignVCenter)
+        tbl.setItem(0, 0, it)
+
+        it = qt.QTableWidgetItem('Class')
+        it.setFont(self.boldFont)
+        it.setTextAlignment(qt.Qt.AlignCenter)
+        tbl.setItem(1, 0, it)
+
+        it = qt.QTableWidgetItem('Precision')
+        it.setFont(self.boldFont)
+        it.setTextAlignment(qt.Qt.AlignCenter)
+        it.setToolTip('The rate of cases predicted to be some class that are '
+                      'actually that class.')
+        tbl.setItem(1, 1, it)
+
+        it = qt.QTableWidgetItem('Recall')
+        it.setFont(self.boldFont)
+        it.setTextAlignment(qt.Qt.AlignCenter)
+        it.setToolTip('The rate of cases in some class that were predicted to '
+                      'be that class.')
+        tbl.setItem(1, 2, it)
 
     @property
     def trainDataReady(self):
@@ -161,10 +184,18 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         ))
 
     def updateBtnMean(self):
-        self.ui.btnMean.enabled = self.classifier and self.testData
+        self.ui.btnMean.enabled = all((
+            self.classifier,
+            self.testDataReady,
+            self.testResultsReady
+        ))
 
     def updateBtnKDE(self):
-        self.ui.btnKDE.enabled = self.classifier and self.testData
+        self.ui.btnKDE.enabled = all((
+            self.classifier,
+            self.testDataReady,
+            self.testResultsReady
+        ))
 
     def updateBtnCorr(self):
         pass
@@ -229,10 +260,51 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.testData = self.logic.buildCases(self.ui.pathTrain.currentPath)
 
         results = self.logic.compute(self.classifier, self.testData)
-        # if chkSaveResults, save to pathResults
 
-        # populate self.ui.tblStats with confusion matrix and other statistics
-        # see https://github.com/slicersalt/SlicerDWD/issues/6
+        clss = np.unique(results['actual'])
+
+        # confusion = sklearn.metrics.confusion_matrix(
+        #     results['actual'], results['predict']
+        # )
+
+        tbl = self.ui.tblStats
+
+        while tbl.rowCount > 2:
+            tbl.removeRow(2)
+
+        accuracy = sklearn.metrics.accuracy_score(
+            results['actual'], results['predict']
+        )
+
+        it = qt.QTableWidgetItem()
+        it.setText(format(accuracy, '.2%'))
+        tbl.setItem(0, 1, it)
+
+        for i, cls in enumerate(clss):
+            precision = sklearn.metrics.precision_score(
+                results['actual'], results['predict'],
+                pos_label=cls
+            )
+            recall = sklearn.metrics.recall_score(
+                results['actual'], results['predict'],
+                pos_label=cls
+            )
+
+            tbl.insertRow(2 + i)
+
+            it = qt.QTableWidgetItem('{}'.format(cls))
+            it.setFont(self.boldFont)
+            tbl.setItem(2 + i, 0, it)
+
+            it = qt.QTableWidgetItem('{:.2%}'.format(precision))
+            tbl.setItem(2 + i, 1, it)
+
+            it = qt.QTableWidgetItem('{:.2%}'.format(recall))
+            tbl.setItem(2 + i, 2, it)
+
+        tbl.resizeColumnToContents(0)
+
+        # if chkSaveResults, save to pathResults
 
     def btnMeanClicked(self):
         """Called when the "Compute Projected Mean Shape" button is clicked."""
@@ -271,19 +343,23 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         kde_space = np.linspace(results['distance'].min(), results['distance'].max())
         kernels = {
-            'Class {}'.format(t): scipy.stats.gaussian_kde(
+            '{}'.format(t): scipy.stats.gaussian_kde(
                 results['distance'][results['actual'] == t]
             ) for t in np.unique(results['actual'])
         }
 
-        kde_results = {
+        results_table = self.logic.table({
+            'distance': results['distance'],
+            # skip results['actual'] and results['predict'] since they are string
+            # arrays, incompatible with vtk.util.numpy_to_vtk
+            'rand': results['rand']
+        }, 'DWD Results')
+
+        kde_table = self.logic.table({
             'x': kde_space,
             'all': kernel_all(kde_space),
             **{t: kernel(kde_space) for t, kernel in kernels.items()}
-        }
-
-        results_table = self.logic.table(results, 'DWD Results')
-        kde_table = self.logic.table(kde_results, 'DWD Results KDE')
+        }, 'DWD Results KDE')
 
         chart = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLPlotChartNode')
         chart.SetTitle('DWD Distance Distribution')
@@ -300,7 +376,7 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         full = self.logic.scatterPlot(
             chart, kde_table, 'x', 'all',
-            name='All Classes KDE'
+            name='All Classes'
         )
         full.SetColor(0, 0, 0)
 
@@ -312,7 +388,7 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         for key, color in zip(kernels, colors):
             plot = self.logic.scatterPlot(
                 chart, kde_table, 'x', key,
-                name=key + ' KDE'
+                name=key
             )
             plot.SetColor(*color)
 
@@ -462,6 +538,7 @@ class SlicerDWDLogic(ScriptedLoadableModuleLogic):
         table = tableNode.GetTable()
 
         for name, data in columns.items():
+            print(name, data)
             arr = vtk.util.numpy_support.numpy_to_vtk(data)
             arr.SetName(name)
             table.AddColumn(arr)
