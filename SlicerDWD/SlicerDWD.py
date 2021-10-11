@@ -281,68 +281,57 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.testData = self.logic.buildCases(self.ui.pathTrain.currentPath)
 
         results = self.logic.compute(self.classifier, self.testData)
-        kernel_all = scipy.stats.gaussian_kde(results['distance'])
-        results['rand'] = np.random.normal(
-            size=results['distance'].shape
-        ) * kernel_all(results['distance']) * 0.05 + 0.007
+        kdeResults = self.logic.kde(results)
 
-        # todo encapsulate kde plot work
+        # to vertically center the samples in the plot
+        loc = kdeResults['all'].max() / 2
+        stddev = loc / 20
 
-        kde_space = np.linspace(results['distance'].min(), results['distance'].max())
-        kernels = {
-            '{}'.format(t): scipy.stats.gaussian_kde(
-                results['distance'][results['actual'] == t]
-            ) for t in np.unique(results['actual'])
+        clss = np.unique(results['actual'])
+
+        results = {
+            'distance': results['distance'],
+            'random': np.random.normal(loc, stddev, size=results['distance'].shape)
         }
 
-        results_table = self.logic.table({
-            'distance': results['distance'],
-            # skip results['actual'] and results['predict'] since they are string
-            # arrays, incompatible with vtk.util.numpy_to_vtk
-            'rand': results['rand']
-        }, 'DWD Results')
+        table = self.logic.table(results, 'DWD Results')
+        kdeTable = self.logic.table(kdeResults, 'KDE Results')
 
-        kde_table = self.logic.table({
-            'x': kde_space,
-            'all': kernel_all(kde_space),
-            **{t: kernel(kde_space) for t, kernel in kernels.items()}
-        }, 'DWD Results KDE')
+        colors = [
+            (1.0, 0.7, 0.2),  # orange
+            (0.2, 0.6, 0.8),  # blue
+            (1.0, 0.4, 0.3),  # red
+            (0.2, 1.0, 0.4),  # green
+        ]
+
+        allSeries = [
+            self.logic.series(
+                table, 'distance', 'random', 'Samples',
+                lineStyle=slicer.vtkMRMLPlotSeriesNode.LineStyleNone,
+                markerStyle=slicer.vtkMRMLPlotSeriesNode.MarkerStyleCross,
+            ),
+            self.logic.series(
+                kdeTable, 'x', 'all', 'All Classes',
+            ),
+        ]
+        allSeries += [
+            self.logic.series(
+                kdeTable, 'x', cls,
+                color=color
+            )
+            for cls, color in zip(clss, colors)
+        ]
 
         chart = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLPlotChartNode')
         chart.SetTitle('DWD Distance Distribution')
         chart.SetXAxisTitle('Distance')
         chart.SetYAxisTitle('Density')
 
-        scatter = self.logic.scatterPlot(
-            chart, results_table, 'distance', 'rand',
-            name='Samples'
-        )
-        scatter.SetLineStyle(scatter.LineStyleNone)
-        scatter.SetMarkerStyle(scatter.MarkerStyleCross)
-        scatter.SetColor(0, 0, 0)
+        for series in allSeries:
+            chart.AddAndObservePlotSeriesNodeID(series.GetID())
 
-        full = self.logic.scatterPlot(
-            chart, kde_table, 'x', 'all',
-            name='All Classes'
-        )
-        full.SetColor(0, 0, 0)
-
-        colors = [
-            (1.0, 0.7, 0.2),
-            (0.2, 0.6, 0.8),
-        ]
-
-        for key, color in zip(kernels, colors):
-            plot = self.logic.scatterPlot(
-                chart, kde_table, 'x', key,
-                name=key
-            )
-            plot.SetColor(*color)
-
-        self.logic.show(chart)
-
-        mgr = slicer.app.layoutManager()
-        mgr.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUpPlotView)
+        plots = slicer.modules.plots.logic()
+        plots.ShowChartInLayout(chart)
 
     def populateStatsTable(self, tbl, results):
         clss = np.unique(results['actual'])
@@ -559,44 +548,56 @@ class SlicerDWDLogic(ScriptedLoadableModuleLogic):
         intercept = -float(classifier.intercept_)
         return direction, intercept
 
-    # region plot util todo encapsulate
+    def kde(self, results):
+        actual = results['actual']
+        distance = results['distance']
+        minmax = distance.min(), distance.max()
+        x = np.linspace(*minmax)
+
+        clss, counts = np.unique(actual, return_counts=True)
+        total = len(actual)
+        factors = counts / total  # scaling factor to normalize masked kernels
+
+        kernel = scipy.stats.gaussian_kde(distance)
+        kernels = {
+            cls: scipy.stats.gaussian_kde(distance[actual == cls])
+            for cls in clss
+        }
+
+        return {
+            'x': x,
+            'all': kernel(x),
+            **{
+                cls: kernels[cls](x) * factor
+                for cls, factor in zip(kernels, factors)}
+        }
 
     def table(self, columns, name='Table'):
         tableNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLTableNode', name)
         table = tableNode.GetTable()
 
         for name, data in columns.items():
-            print(name, data)
             arr = vtk.util.numpy_support.numpy_to_vtk(data)
             arr.SetName(name)
             table.AddColumn(arr)
 
         return tableNode
 
-    def scatterPlot(self, chartNode, tableNode, x, y, name='Series'):
-        psn = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLPlotSeriesNode', name)
-        psn.SetAndObserveTableNodeID(tableNode.GetID())
-        psn.SetXColumnName(x)
-        psn.SetYColumnName(y)
-        psn.SetPlotType(slicer.vtkMRMLPlotSeriesNode.PlotTypeScatter)
-        psn.SetMarkerStyle(psn.MarkerStyleNone)
-        psn.SetUniqueColor()
-
-        chartNode.AddAndObservePlotSeriesNodeID(psn.GetID())
-
-        return psn
-
-    def show(self, chartNode):
-        plots = slicer.modules.plots.logic()
-
-        mgr = slicer.app.layoutManager()
-        mgr.setLayout(plots.GetLayoutWithPlot(mgr.layout))
-
-        widget = mgr.plotWidget(0)
-        viewNode = widget.mrmlPlotViewNode()
-        viewNode.SetPlotChartNodeID(chartNode.GetID())
-
-    # endregion
+    def series(self, table, x, y, name='Series',
+               plotType=slicer.vtkMRMLPlotSeriesNode.PlotTypeScatter,
+               lineStyle=slicer.vtkMRMLPlotSeriesNode.LineStyleSolid,
+               markerStyle=slicer.vtkMRMLPlotSeriesNode.MarkerStyleNone,
+               color=(0, 0, 0),
+               ):
+        node = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLPlotSeriesNode', name)
+        node.SetAndObserveTableNodeID(table.GetID())
+        node.SetXColumnName(x)
+        node.SetYColumnName(y)
+        node.SetPlotType(plotType)
+        node.SetLineStyle(lineStyle)
+        node.SetMarkerStyle(markerStyle)
+        node.SetColor(*color)
+        return node
 
 
 class DWDTest(ScriptedLoadableModuleTest):
