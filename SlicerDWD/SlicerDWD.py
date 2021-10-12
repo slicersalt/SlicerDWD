@@ -20,11 +20,19 @@ import scipy
 
 import sklearn.metrics
 
+import importlib
+
+DWD_VERSION = '1.0.2'
+
 try:
     import dwd
 except ModuleNotFoundError:
-    slicer.util.pip_install("dwd")
+    slicer.util.pip_install('dwd=={}'.format(DWD_VERSION))
     import dwd
+
+if dwd.__version__ != DWD_VERSION:
+    slicer.util.pip_install('dwd=={}'.format(DWD_VERSION))
+    importlib.reload(dwd)
 
 
 class SlicerDWD(ScriptedLoadableModule):
