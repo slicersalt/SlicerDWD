@@ -34,6 +34,19 @@ if dwd.__version__ != DWD_VERSION:
     slicer.util.pip_install('dwd=={}'.format(DWD_VERSION))
     importlib.reload(dwd)
 
+    def request_restart():
+        if slicer.util.confirmYesNoDisplay(
+            'SlicerDWD has updated Python dependencies. '
+            'It is recommended to restart Slicer. Restart now?'
+        ):
+            slicer.util.restart()
+            slicer.util.exit()
+
+    slicer.app.startupCompleted.connect(
+        # need to use a singeShot timer so confirmYesNoDisplay has a valid QT context.
+        lambda: qt.QTimer.singleShot(0, request_restart)
+    )
+
 
 class SlicerDWD(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
