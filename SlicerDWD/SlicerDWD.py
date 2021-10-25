@@ -1,26 +1,18 @@
 import csv
-import random
+import importlib
 import os.path
 import warnings
+from collections import namedtuple
 
+import ctk
+import numpy as np
+import qt
+import sklearn.metrics
 import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
-import qt
-
-import vtk
-from vtk.numpy_interface import dataset_adapter as dsa
-
-import ctk
-
-import numpy as np
-
-import scipy
-
-import sklearn.metrics
-
-import importlib
+import SlicerDWDUtils as util
 
 DWD_VERSION = '1.0.2'
 
@@ -222,10 +214,11 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.classifier = None
 
-        self.trainData = self.logic.buildCases(self.ui.pathTrain.currentPath)
+        with open(self.ui.pathTrain.currentPath) as f:
+            self.trainData = util.load_cases(f)
         if self.ui.chkSample.checked:
             part = self.ui.spnSample.value / 100
-            self.trainData, self.testData = self.logic.splitCases(self.trainData, part)
+            self.trainData, self.testData = util.split_cases(self.trainData, part)
 
         c = "auto" if self.ui.chkAutoTune.checked else self.ui.spnTuningC.value
 
@@ -241,7 +234,8 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """Called when the "Test Classifier" button is clicked."""
 
         if not self.ui.chkSample.checked:
-            self.testData = self.logic.buildCases(self.ui.pathTrain.currentPath)
+            with open(self.ui.pathTrain.currentPath) as f:
+                self.testData = util.load_cases(f)
 
         results = self.logic.compute(self.classifier, self.testData)
         self.populateStatsTable(self.ui.tblTestStats, results)
@@ -254,7 +248,8 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """Called when the "Compute Projected Mean Shape" button is clicked."""
 
         if not self.ui.chkSample.checked:
-            self.testData = self.logic.buildCases(self.ui.pathTrain.currentPath)
+            with open(self.ui.pathTrain.currentPath) as f:
+                self.testData = util.load_cases(f)
 
         mean = self.logic.meanShape(self.classifier, self.testData, factor=50.0)
 
@@ -275,28 +270,27 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """Called when the "Show KDE" button is clicked."""
 
         if not self.ui.chkSample.checked:
-            self.testData = self.logic.buildCases(self.ui.pathTrain.currentPath)
+            with open(self.ui.pathTrain.currentPath) as f:
+                self.testData = util.load_cases(f)
 
-        results = self.logic.compute(self.classifier, self.testData)
-        kdeResults = self.logic.kde(results)
+        res = self.logic.compute(self.classifier, self.testData)
+        kres = util.kde(res.distance, res.actual, rescale=True)
 
         # to vertically center the samples in the plot
-        loc = kdeResults["all"].max() / 2
+        loc = kres.kernel.max() / 2
         stddev = loc / 20
 
-        clss = np.unique(results["actual"])
-
-        results = {
-            "distance": results["distance"],
-            "random": np.random.normal(
-                loc,
-                stddev,
-                size=results["distance"].shape,
-            ),
-        }
-
-        table = self.logic.table(results, "DWD Results")
-        kdeTable = self.logic.table(kdeResults, "KDE Results")
+        table = util.make_table(
+            "DWD Results",
+            distance=res.distance,
+            random=np.random.normal(loc, stddev, size=res.distance.shape),
+        )
+        kdeTable = util.make_table(
+            "KDE Results",
+            x=kres.x,
+            all=kres.kernel,
+            **dict(zip(kres.ulabels, kres.kernels))
+        )
 
         colors = [
             (1.0, 0.7, 0.2),  # orange
@@ -306,19 +300,16 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         ]
 
         allSeries = [
-            self.logic.series(
-                table,
-                "distance",
-                "random",
-                "Samples",
+            util.make_series(
+                "Samples", table, "distance", "random",
                 lineStyle=slicer.vtkMRMLPlotSeriesNode.LineStyleNone,
                 markerStyle=slicer.vtkMRMLPlotSeriesNode.MarkerStyleCross,
             ),
-            self.logic.series(kdeTable, "x", "all", "All Classes"),
+            util.make_series("All Classes", kdeTable, "x", "all"),
         ]
         allSeries += [
-            self.logic.series(kdeTable, "x", cls, color=color)
-            for cls, color in zip(clss, colors)
+            util.make_series(label, kdeTable, "x", label, color=color)
+            for label, color in zip(kres.ulabels, colors)
         ]
 
         chart = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLPlotChartNode")
@@ -333,41 +324,32 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         plots.ShowChartInLayout(chart)
 
     def populateStatsTable(self, tbl, results):
-        clss = np.unique(results["actual"])
-
         while tbl.rowCount > 2:
             tbl.removeRow(2)
 
-        accuracy = sklearn.metrics.accuracy_score(results["actual"], results["predict"])
+        stats = self.logic.stats(results)
 
         it = qt.QTableWidgetItem()
-        it.setText(format(accuracy, ".2%"))
+        it.setText(format(stats.accuracy, '.2%'))
         tbl.setItem(0, 1, it)
 
-        for i, cls in enumerate(clss):
-            precision = sklearn.metrics.precision_score(
-                results["actual"], results["predict"], pos_label=cls
-            )
-            recall = sklearn.metrics.recall_score(
-                results["actual"], results["predict"], pos_label=cls
-            )
-
+        for i, label in enumerate(stats.labels):
             tbl.insertRow(2 + i)
 
             it = tbl.item(0, 0).clone()  # copy "Accuracy" label style
-            it.setText("{}".format(cls))
+            it.setText("{}".format(label))
             tbl.setItem(2 + i, 0, it)
 
-            it = qt.QTableWidgetItem("{:.2%}".format(precision))
+            it = qt.QTableWidgetItem("{:.2%}".format(stats.precision[i]))
             tbl.setItem(2 + i, 1, it)
 
-            it = qt.QTableWidgetItem("{:.2%}".format(recall))
+            it = qt.QTableWidgetItem("{:.2%}".format(stats.recall[i]))
             tbl.setItem(2 + i, 2, it)
 
         tbl.resizeColumnToContents(0)
 
     def populateResultsTable(self, tbl, results):
-        count = len(results["distance"])
+        count = len(results.distance)
 
         while tbl.rowCount > count:
             tbl.removeRow(0)
@@ -376,10 +358,10 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             tbl.insertRow(0)
 
         for i in range(count):
-            filename = os.path.basename(results["filename"][i])
-            actual = str(results["actual"][i])
-            predict = str(results["predict"][i])
-            distance = "{:.3f}".format(results["distance"][i])
+            filename = os.path.basename(results.filename[i])
+            actual = str(results.actual[i])
+            predict = str(results.predict[i])
+            distance = "{:.3f}".format(results.distance[i])
 
             tbl.setItem(i, 0, qt.QTableWidgetItem(filename))
             tbl.setItem(i, 1, qt.QTableWidgetItem(actual))
@@ -403,13 +385,18 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         #     self.initializeParameterNode()
 
 
+ComputeResult = namedtuple('ComputeResult', ['filename', 'actual', 'predict', 'distance'])
+
+StatsResult = namedtuple('StatsResult', ['accuracy', 'labels', 'precision', 'recall'])
+
+
 class SlicerDWDLogic(ScriptedLoadableModuleLogic):
-    """This class should implement all the actual computation done by your module.
-    The interface should be such that other python code can import this class and
-    make use of the functionality without requiring an instance of the Widget. Uses
+    """This class should implement all the actual computation done by your module. The
+    interface should be such that other python code can import this class and make use
+    of the functionality without requiring an instance of the Widget. Uses
     ScriptedLoadableModuleLogic base class, available at:
-    https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer
-    /ScriptedLoadableModule.py
+
+    https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
     def __init__(self):
@@ -418,51 +405,8 @@ class SlicerDWDLogic(ScriptedLoadableModuleLogic):
         """
         super().__init__(self)
 
-    # region dataset util todo encapsulate
-
-    def buildCases(self, csv_path):
-        with open(csv_path, "r") as f:
-            reader = csv.reader(f)
-            # could do with list() but this enforces row structure
-            return [(path, group) for path, group in reader]
-
-    def splitCases(self, cases, test_part):
-        random.shuffle(cases)
-        idx = int(len(cases) * test_part)
-        test, train = cases[:idx], cases[idx:]
-        return train, test
-
-    def make_xy(self, cases):
-        X = np.array([self.read_vtk(path).Points.flatten() for path, group in cases])
-        y = np.array([group for path, group in cases])
-
-        return X, y
-
-    # endregion
-
-    # region io util todo encapsulate
-
-    def read_vtk(self, path):
-        reader = vtk.vtkPolyDataReader()
-        reader.SetFileName(str(path))
-        reader.Update()
-        return dsa.WrapDataObject(reader.GetOutput())
-
-    def save_vtk(self, path, pdata: dsa.PolyData):
-        writer = vtk.vtkPolyDataWriter()
-        writer.SetFileName(str(path))
-        writer.SetInputData(pdata.VTKObject)
-        writer.Update()
-
-    def copy_dsa(self, pdata: dsa.PolyData):
-        res = dsa.WrapDataObject(vtk.vtkPolyData())
-        res.VTKObject.DeepCopy(pdata.VTKObject)
-        return res
-
-    # endregion
-
     def train(self, trainData, c):
-        X, y = self.make_xy(trainData)
+        X, y = util.make_xy(trainData)
 
         classifier = dwd.DWD(c)
 
@@ -474,11 +418,11 @@ class SlicerDWDLogic(ScriptedLoadableModuleLogic):
         return classifier
 
     def meanShape(self, classifier, cases, factor=1.0):
-        base = self.read_vtk(cases[0][0])
-        X, _ = self.make_xy(cases)
+        base = util.read_vtk(cases[0][0])
+        X, _ = util.make_xy(cases)
 
         shape = base.Points.shape
-        d, i = self.direction(classifier)
+        d, i = util.direction(classifier)
 
         mean = np.mean(X, axis=0)
         mean -= d * (i - np.dot(mean, d))
@@ -487,119 +431,54 @@ class SlicerDWDLogic(ScriptedLoadableModuleLogic):
         mean_dir = d * factor
         mean_dir = mean_dir.reshape(shape)
 
-        out = self.copy_dsa(base)
+        out = util.copy_dsa(base)
         out.Points = mean
         out.PointData.append(mean_dir, "Direction")
 
         return out
 
     def compute(self, classifier, cases):
-        d, i = self.direction(classifier)
-        X, y = self.make_xy(cases)
+        d, i = util.direction(classifier)
+        X, y = util.make_xy(cases)
 
-        filename = np.array([row[0] for row in cases])
+        filename = np.array([path for path, group in cases])
         actual = y
         predict = classifier.predict(X)
         distance = X.dot(d) - i
 
-        return {
-            "filename": filename,
-            "actual": actual,
-            "predict": predict,
-            "distance": distance,
-        }
+        return ComputeResult(filename, actual, predict, distance)
+
+    def stats(self, results: ComputeResult):
+        labels = np.unique(results.actual)
+
+        accuracy = sklearn.metrics.accuracy_score(results.actual, results.predict)
+
+        precision = [
+            sklearn.metrics.precision_score(
+                results.actual, results.predict, pos_label=label
+            ) for label in labels
+        ]
+
+        recall = [
+            sklearn.metrics.recall_score(
+                results.actual, results.predict, pos_label=label
+            ) for label in labels
+        ]
+
+        return StatsResult(accuracy, labels, precision, recall)
 
     def saveResults(self, results, path):
         with open(path, "w") as f:
-            writer = csv.DictWriter(
-                f,
-                [
-                    "Filename",
-                    "Actual",
-                    "Predict",
-                    "Distance",
-                ],
-            )
+            writer = csv.writer(f)
+            writer.writerow(['Filename', 'Actual', 'Predict', 'Distance'])
 
-            writer.writeheader()
-
-            for filename, actual, predict, distance in zip(
-                results["filename"],
-                results["actual"],
-                results["predict"],
-                results["distance"],
+            for row in zip(
+                results.filename,
+                results.actual,
+                results.predict,
+                results.distance,
             ):
-                writer.writerow(
-                    {
-                        "Filename": filename,
-                        "Actual": actual,
-                        "Predict": predict,
-                        "Distance": distance,
-                    }
-                )
-
-    def direction(self, classifier):
-        """Return the DWD direction and intercept. The separating hyperplane is of the
-        form 'p.d = d.i', where '.' is the dot product. If 'p.d < d.i', then 'p' is label
-        0. If 'p.d > d.i', then 'p' is label 1.
-        """
-
-        direction = classifier.coef_.reshape(-1)
-        intercept = -float(classifier.intercept_)
-        return direction, intercept
-
-    def kde(self, results):
-        actual = results["actual"]
-        distance = results["distance"]
-        minmax = distance.min(), distance.max()
-        x = np.linspace(*minmax)
-
-        clss, counts = np.unique(actual, return_counts=True)
-        total = len(actual)
-        factors = counts / total  # scaling factor to normalize masked kernels
-
-        kernel = scipy.stats.gaussian_kde(distance)
-        kernels = {
-            cls: scipy.stats.gaussian_kde(distance[actual == cls]) for cls in clss
-        }
-
-        return {
-            "x": x,
-            "all": kernel(x),
-            **{cls: kernels[cls](x) * factor for cls, factor in zip(kernels, factors)},
-        }
-
-    def table(self, columns, name="Table"):
-        tableNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTableNode", name)
-        table = tableNode.GetTable()
-
-        for name, data in columns.items():
-            arr = vtk.util.numpy_support.numpy_to_vtk(data)
-            arr.SetName(name)
-            table.AddColumn(arr)
-
-        return tableNode
-
-    def series(
-        self,
-        table,
-        x,
-        y,
-        name="Series",
-        plotType=slicer.vtkMRMLPlotSeriesNode.PlotTypeScatter,
-        lineStyle=slicer.vtkMRMLPlotSeriesNode.LineStyleSolid,
-        markerStyle=slicer.vtkMRMLPlotSeriesNode.MarkerStyleNone,
-        color=(0, 0, 0),
-    ):
-        node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLPlotSeriesNode", name)
-        node.SetAndObserveTableNodeID(table.GetID())
-        node.SetXColumnName(x)
-        node.SetYColumnName(y)
-        node.SetPlotType(plotType)
-        node.SetLineStyle(lineStyle)
-        node.SetMarkerStyle(markerStyle)
-        node.SetColor(*color)
-        return node
+                writer.writerow(row)
 
 
 class DWDTest(ScriptedLoadableModuleTest):

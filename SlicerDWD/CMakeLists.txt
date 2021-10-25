@@ -4,6 +4,7 @@ set(MODULE_NAME SlicerDWD)
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
   ${MODULE_NAME}.py
+  SlicerDWDUtils/__init__.py
   )
 
 set(MODULE_PYTHON_RESOURCES
