@@ -136,6 +136,7 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.chkSaveResults.stateChanged.connect(self.updateBtnTest)
         self.ui.pathResults.currentPathChanged.connect(self.updateBtnTest)
         self.ui.chkSample.stateChanged.connect(self.updateBtnTest)
+        self.ui.pathTrain.currentPathChanged.connect(self.updateBtnTest)
         self.ui.pathTest.currentPathChanged.connect(self.updateBtnTest)
 
         # register "real" actions
@@ -175,7 +176,6 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         saving = self.ui.chkSaveResults.checked
         dirName = os.path.dirname(self.ui.pathResults.currentPath)
         dirValid = os.path.isdir(dirName)
-        # fileValid = os.path.isfile(self.ui.pathResults.currentPath)
         return not saving or dirValid
 
     def updateBtnTrain(self):
@@ -186,21 +186,13 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             (self.classifier, self.testDataReady, self.testResultsReady)
         )
 
-    def updateBtnMean(self):
         self.ui.btnMean.enabled = all(
-            (self.classifier, self.testDataReady, self.testResultsReady)
+            (self.classifier, self.testDataReady)
         )
 
-    def updateBtnKDE(self):
         self.ui.btnKDE.enabled = all(
-            (self.classifier, self.testDataReady, self.testResultsReady)
+            (self.classifier, self.testDataReady)
         )
-
-    def updateBtnCorr(self):
-        pass
-
-    def updateComCorr(self):
-        pass
 
     def updateSpnSample(self):
         sampling = self.ui.chkSample.checked
@@ -240,20 +232,10 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.classifier = self.logic.train(self.trainData, c)
         self.ui.spnTuningC.value = self.classifier.C
 
-        self.classifierUpdated()
+        self.updateBtnTest()
 
         results = self.logic.compute(self.classifier, self.trainData)
         self.populateStatsTable(self.ui.tblTrainStats, results)
-
-    def classifierUpdated(self):
-        """Update any UI that should be enabled or disabled when the classifier is
-        created or removed.
-        """
-        self.updateBtnTest()
-        self.updateBtnMean()
-        self.updateBtnKDE()
-        self.updateBtnCorr()
-        self.updateComCorr()
 
     def btnTestClicked(self):
         """Called when the "Test Classifier" button is clicked."""
