@@ -80,7 +80,6 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.classifier = None
         self.trainData = None
         self.testData = None
-        self.metrics = None
 
         self.boldFont = None
 
@@ -122,12 +121,16 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.pathResults.currentPathChanged.connect(self.updateUI)
         self.ui.pathTrain.currentPathChanged.connect(self.updateUI)
         self.ui.pathTest.currentPathChanged.connect(self.updateUI)
+        self.ui.pathMetrics.currentPathChanged.connect(self.updateUI)
+
+        self.ui.pathMetrics.currentPathChanged.connect(self.populateMetricsOptions)
 
         # register actions
         self.ui.btnTrain.clicked.connect(self.btnTrainClicked)
         self.ui.btnTest.clicked.connect(self.btnTestClicked)
         self.ui.btnMean.clicked.connect(self.btnMeanClicked)
         self.ui.btnKDE.clicked.connect(self.btnKDEClicked)
+        self.ui.btnCorr.clicked.connect(self.btnCorrClicked)
 
         # create bold "header" font for stats tables
         self.boldFont = self.ui.SlicerDWD.font
@@ -140,6 +143,12 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.pathTest.nameFilters += ("*.csv",)
         self.ui.pathMetrics.nameFilters += ("*.csv",)
         self.ui.pathResults.nameFilters += ("*.csv",)
+
+    @property
+    def metricsReady(self):
+        """Whether metrics are ready to load"""
+        fileValid = os.path.isfile(self.ui.pathMetrics.currentPath)
+        return fileValid
 
     @property
     def trainDataReady(self):
@@ -193,6 +202,9 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             (self.classifier, self.testDataReady)
         )
 
+        self.ui.btnCorr.enabled = self.ui.comCorr.enabled = all(
+            (self.classifier, self.testDataReady, self.metricsReady)
+        )
 
     def btnTrainClicked(self):
         """Called when the "Train Classifier" button is clicked."""
@@ -308,6 +320,38 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         plots = slicer.modules.plots.logic()
         plots.ShowChartInLayout(chart)
 
+    def btnCorrClicked(self):
+        if not self.ui.chkSample.checked:
+            with open(self.ui.pathTrain.currentPath) as f:
+                self.testData = util.load_cases(f)
+
+        result = self.logic.compute(self.classifier, self.testData)
+        corr_result = self.logic.corrWith(
+            result, self.ui.pathMetrics.currentPath, self.ui.comCorr.currentText
+        )
+
+        field = self.ui.comCorr.currentText
+        table = util.make_table(
+            'Correlation',
+            distance=corr_result.distance,
+            metric=corr_result.metric,
+        )
+
+        series = util.make_series(
+            f'Distance vs {field}', table, 'distance', 'metric',
+            lineStyle=slicer.vtkMRMLPlotSeriesNode.LineStyleNone,
+            markerStyle=slicer.vtkMRMLPlotSeriesNode.MarkerStyleCross,
+        )
+
+        chart = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLPlotChartNode')
+        chart.SetTitle('Correlation')
+        chart.SetXAxisTitle('Metric')
+        chart.SetYAxisTitle('Distance')
+
+        chart.AddAndObservePlotSeriesNodeID(series.GetID())
+        plots = slicer.modules.plots.logic()
+        plots.ShowChartInLayout(chart)
+
     def populateStatsTable(self, tbl, results):
         while tbl.rowCount > 2:
             tbl.removeRow(2)
@@ -353,6 +397,21 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             tbl.setItem(i, 2, qt.QTableWidgetItem(predict))
             tbl.setItem(i, 3, qt.QTableWidgetItem(distance))
 
+    def populateMetricsOptions(self):
+        if not self.metricsReady:
+            pass
+
+        with open(self.ui.pathMetrics.currentPath) as f:
+            reader = csv.reader(f)
+            fields = next(reader)
+
+        # assume the first field is the case ID/filename
+        fields = fields[1:]
+
+        self.ui.comCorr.clear()
+        for field in fields:
+            self.ui.comCorr.addItem(field)
+
     def cleanup(self):
         """Called when the application closes and the module widget is destroyed."""
         self.removeObservers()
@@ -371,8 +430,8 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 
 ComputeResult = namedtuple('ComputeResult', ['filename', 'actual', 'predict', 'distance'])
-
 StatsResult = namedtuple('StatsResult', ['accuracy', 'labels', 'precision', 'recall'])
+CorrResult = namedtuple('CorrResult', ['coeff', 'filename', 'distance', 'metric'])
 
 
 class SlicerDWDLogic(ScriptedLoadableModuleLogic):
@@ -464,6 +523,25 @@ class SlicerDWDLogic(ScriptedLoadableModuleLogic):
                 results.distance,
             ):
                 writer.writerow(row)
+
+    def corrWith(self, results: ComputeResult, metricsPath, field):
+        with open(metricsPath) as f:
+            reader = csv.reader(f)
+
+            fields = next(reader)
+            idx = fields.index(field)
+
+            data = {row[0]: row[idx] for row in reader}
+
+        # metric data in correspondance with results
+        metric = np.array([data[name] for name in results.filename])
+
+        # correlation only works on numeric data
+        metric = metric.astype(np.float)
+
+        corr = np.corrcoef(results.distance, metric)
+
+        return CorrResult(corr, results.filename, results.distance, metric)
 
 
 class DWDTest(ScriptedLoadableModuleTest):
