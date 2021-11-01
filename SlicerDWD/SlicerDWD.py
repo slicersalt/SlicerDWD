@@ -115,23 +115,15 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose
         )
 
-        # couple checkboxes with optional parameters
-        self.ui.chkSample.stateChanged.connect(self.updateSpnSample)
-        self.ui.chkSample.stateChanged.connect(self.updatePathTest)
-        self.ui.chkAutoTune.stateChanged.connect(self.updateSpnTuningC)
-        self.ui.chkSaveResults.stateChanged.connect(self.updatePathResults)
+        # Dynamically enable/disable UI elements
+        self.ui.chkSample.stateChanged.connect(self.updateUI)
+        self.ui.chkAutoTune.stateChanged.connect(self.updateUI)
+        self.ui.chkSaveResults.stateChanged.connect(self.updateUI)
+        self.ui.pathResults.currentPathChanged.connect(self.updateUI)
+        self.ui.pathTrain.currentPathChanged.connect(self.updateUI)
+        self.ui.pathTest.currentPathChanged.connect(self.updateUI)
 
-        # changing these may affect if we can train
-        self.ui.pathTrain.currentPathChanged.connect(self.updateBtnTrain)
-
-        # changing these may affect if we can test
-        self.ui.chkSaveResults.stateChanged.connect(self.updateBtnTest)
-        self.ui.pathResults.currentPathChanged.connect(self.updateBtnTest)
-        self.ui.chkSample.stateChanged.connect(self.updateBtnTest)
-        self.ui.pathTrain.currentPathChanged.connect(self.updateBtnTest)
-        self.ui.pathTest.currentPathChanged.connect(self.updateBtnTest)
-
-        # register "real" actions
+        # register actions
         self.ui.btnTrain.clicked.connect(self.btnTrainClicked)
         self.ui.btnTest.clicked.connect(self.btnTestClicked)
         self.ui.btnMean.clicked.connect(self.btnMeanClicked)
@@ -170,10 +162,25 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         dirValid = os.path.isdir(dirName)
         return not saving or dirValid
 
-    def updateBtnTrain(self):
+    def updateUI(self):
+        sampling = self.ui.chkSample.checked
+        self.ui.spnSample.enabled = sampling
+        self.ui.spnSampleLabel.enabled = sampling
+        self.ui.pathTest.enabled = not sampling
+        self.ui.pathTestLabel.enabled = not sampling
+
+        autotuning = self.ui.chkAutoTune.checked
+        self.ui.spnTuningC.enabled = not autotuning
+        self.ui.spnTuningC.enabled = not autotuning
+        if self.classifier:
+            self.ui.spnTuningC.value = self.classifier.C
+
+        saving = self.ui.chkSaveResults.checked
+        self.ui.pathResults.enabled = saving
+        self.ui.pathResultsLabel.enabled = saving
+
         self.ui.btnTrain.enabled = self.trainDataReady
 
-    def updateBtnTest(self):
         self.ui.btnTest.enabled = all(
             (self.classifier, self.testDataReady, self.testResultsReady)
         )
@@ -186,28 +193,6 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             (self.classifier, self.testDataReady)
         )
 
-    def updateSpnSample(self):
-        sampling = self.ui.chkSample.checked
-        self.ui.spnSample.enabled = sampling
-        self.ui.spnSampleLabel.enabled = sampling
-
-    def updatePathTest(self):
-        sampling = self.ui.chkSample.checked
-        self.ui.pathTest.enabled = not sampling
-        self.ui.pathTestLabel.enabled = not sampling
-
-    def updateSpnTuningC(self):
-        autotuning = self.ui.chkAutoTune.checked
-        self.ui.spnTuningC.enabled = not autotuning
-        self.ui.spnTuningC.enabled = not autotuning
-
-        if self.classifier:
-            self.ui.spnTuningC.value = self.classifier.C
-
-    def updatePathResults(self):
-        saving = self.ui.chkSaveResults.checked
-        self.ui.pathResults.enabled = saving
-        self.ui.pathResultsLabel.enabled = saving
 
     def btnTrainClicked(self):
         """Called when the "Train Classifier" button is clicked."""
@@ -225,7 +210,7 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.classifier = self.logic.train(self.trainData, c)
         self.ui.spnTuningC.value = self.classifier.C
 
-        self.updateBtnTest()
+        self.updateUI()
 
         results = self.logic.compute(self.classifier, self.trainData)
         self.populateStatsTable(self.ui.tblTrainStats, results)
