@@ -335,12 +335,19 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             'Correlation',
             distance=corr_result.distance,
             metric=corr_result.metric,
+            fit=corr_result.fit,
         )
 
-        series = util.make_series(
-            f'Distance vs {field}', table, 'distance', 'metric',
+        scatter = util.make_series(
+            f'Distance vs {field}', table, 'metric', 'distance',
             lineStyle=slicer.vtkMRMLPlotSeriesNode.LineStyleNone,
             markerStyle=slicer.vtkMRMLPlotSeriesNode.MarkerStyleCross,
+        )
+
+        fit = util.make_series(
+            f'Linear Fit', table, 'metric', 'fit',
+            lineStyle=slicer.vtkMRMLPlotSeriesNode.LineStyleSolid,
+            markerStyle=slicer.vtkMRMLPlotSeriesNode.MarkerStyleNone,
         )
 
         chart = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLPlotChartNode')
@@ -348,7 +355,9 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         chart.SetXAxisTitle('Metric')
         chart.SetYAxisTitle('Distance')
 
-        chart.AddAndObservePlotSeriesNodeID(series.GetID())
+        chart.AddAndObservePlotSeriesNodeID(scatter.GetID())
+        chart.AddAndObservePlotSeriesNodeID(fit.GetID())
+
         plots = slicer.modules.plots.logic()
         plots.ShowChartInLayout(chart)
 
@@ -431,7 +440,7 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 ComputeResult = namedtuple('ComputeResult', ['filename', 'actual', 'predict', 'distance'])
 StatsResult = namedtuple('StatsResult', ['accuracy', 'labels', 'precision', 'recall'])
-CorrResult = namedtuple('CorrResult', ['coeff', 'filename', 'distance', 'metric'])
+CorrResult = namedtuple('CorrResult', ['coeff', 'filename', 'distance', 'metric', 'fit'])
 
 
 class SlicerDWDLogic(ScriptedLoadableModuleLogic):
@@ -533,6 +542,8 @@ class SlicerDWDLogic(ScriptedLoadableModuleLogic):
 
             data = {row[0]: row[idx] for row in reader}
 
+        results.distance.sort()
+
         # metric data in correspondance with results
         metric = np.array([data[name] for name in results.filename])
 
@@ -541,7 +552,20 @@ class SlicerDWDLogic(ScriptedLoadableModuleLogic):
 
         corr = np.corrcoef(results.distance, metric)
 
-        return CorrResult(corr, results.filename, results.distance, metric)
+        # linear regression
+        x = metric
+        y = results.distance
+        A = np.vstack([x, np.ones_like(x)]).T
+
+        # print(x.shape)
+        # print(y.shape)
+        # print(A.shape)
+
+        m, c = np.linalg.lstsq(A, y, rcond=None)[0]
+        # print((m, c))
+        fit = m * x + c
+
+        return CorrResult(corr, results.filename, results.distance, metric, fit)
 
 
 class DWDTest(ScriptedLoadableModuleTest):
