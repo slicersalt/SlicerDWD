@@ -17,3 +17,9 @@ The extension should be built as a 3D Slicer extension. The extension depends on
 
 [sva]: https://github.com/DCBIA-OrthoLab/ShapeVariationAnalyzer
 [spv]: https://github.com/NIRALUser/ShapePopulationViewer
+
+# Documentation
+
+See [usage.md][usage] for usage documentation.
+
+[usage]: ./docs/usage.md
