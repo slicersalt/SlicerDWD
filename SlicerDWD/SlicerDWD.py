@@ -339,7 +339,7 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         )
 
         scatter = util.make_series(
-            f'Distance vs {field}', table, 'metric', 'distance',
+            f'Samples', table, 'metric', 'distance',
             lineStyle=slicer.vtkMRMLPlotSeriesNode.LineStyleNone,
             markerStyle=slicer.vtkMRMLPlotSeriesNode.MarkerStyleCross,
         )
@@ -351,8 +351,8 @@ class SlicerDWDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         )
 
         chart = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLPlotChartNode')
-        chart.SetTitle('Correlation')
-        chart.SetXAxisTitle('Metric')
+        chart.SetTitle(f'Distance vs {field}')
+        chart.SetXAxisTitle(f'{field}')
         chart.SetYAxisTitle('Distance')
 
         chart.AddAndObservePlotSeriesNodeID(scatter.GetID())
