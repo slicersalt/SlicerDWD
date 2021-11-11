@@ -56,7 +56,7 @@ This operation correlates the distance with some other numerical metric. Use the
 [sva]: https://github.com/DCBIA-OrthoLab/ShapeVariationAnalyzer
 [spv]: https://github.com/NIRALUser/ShapePopulationViewer
 
-[mean-shape]: https://raw.githubusercontent.com.com/slicersalt/SlicerDWD/main/docs/screenshots/mean-shape.png
-[mean-shape-vector]: https://raw.githubusercontent.com/slicersalt/dwd/main/docs/screenshots/mean-shape-vector.png
-[kde]: https://raw.githubusercontent.com/slicersalt/dwd/main/docs/screenshots/kde.png
-[correlation]: https://raw.githubusercontent.com/slicersalt/dwd/main/docs/screenshots/correlation.png
+[mean-shape]: https://raw.githubusercontent.com/slicersalt/SlicerDWD/main/docs/screenshots/mean-shape.png
+[mean-shape-vector]: https://raw.githubusercontent.com/slicersalt/SlicerDWD/main/docs/screenshots/mean-shape-vectors.png
+[kde]: https://raw.githubusercontent.com/slicersalt/SlicerDWD/main/docs/screenshots/kde.png
+[correlation]: https://raw.githubusercontent.com/slicersalt/SlicerDWD/main/docs/screenshots/correlation.png
