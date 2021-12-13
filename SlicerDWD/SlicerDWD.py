@@ -7,7 +7,6 @@ from collections import namedtuple
 import ctk
 import numpy as np
 import qt
-import sklearn.metrics
 import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
@@ -18,9 +17,11 @@ DWD_VERSION = '1.0.2'
 
 try:
     import dwd
+    import sklearn.metrics
 except ModuleNotFoundError:
     slicer.util.pip_install('dwd=={}'.format(DWD_VERSION))
     import dwd
+    import sklearn.metrics
 
 if dwd.__version__ != DWD_VERSION:
     slicer.util.pip_install('dwd=={}'.format(DWD_VERSION))
