@@ -543,7 +543,7 @@ class SlicerDWDLogic(ScriptedLoadableModuleLogic):
 
             data = {row[0]: row[idx] for row in reader}
 
-        results.distance.sort()
+        # results.distance.sort()
 
         # metric data in correspondance with results
         metric = np.array([data[name] for name in results.filename])
